@@ -46,7 +46,7 @@ export function Layout() {
                 </li>
                 <li className="nav-item">
                   <NavLink className="nav-link" to="/api-keys">
-                    API keys
+                    User keys
                   </NavLink>
                 </li>
               </ul>

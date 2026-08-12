@@ -2,18 +2,31 @@ import { apiFetch, type FetchAuth } from "./client"
 import type {
   ApiKeyCreated,
   ApiKeyListed,
-  Membership,
-  MembershipRole,
-  MembershipStatus,
+  Member,
+  MemberRole,
+  MemberStatus,
   Organization,
   Profile,
   Project,
+  ServiceAccount,
   Task,
   TaskStatus,
 } from "./types"
 
 function orgBase(orgId: string): string {
   return `/api/organizations/${orgId}`
+}
+
+function userKeysBase(userId: string): string {
+  return `/api/users/${userId}/api-keys`
+}
+
+function memberKeysBase(orgId: string, memberId: string): string {
+  return `${orgBase(orgId)}/members/${memberId}/api-keys`
+}
+
+function saBase(orgId: string): string {
+  return `${orgBase(orgId)}/service-accounts`
 }
 
 export const api = {
@@ -53,34 +66,34 @@ export const api = {
   deleteOrganization: (orgId: string) =>
     apiFetch<void>(orgBase(orgId), { method: "DELETE" }),
 
-  listMemberships: async (orgId: string) => {
-    const data = await apiFetch<{ memberships: Membership[] }>(
-      `${orgBase(orgId)}/memberships`,
+  listMembers: async (orgId: string) => {
+    const data = await apiFetch<{ members: Member[] }>(
+      `${orgBase(orgId)}/members`,
     )
-    return data.memberships ?? []
+    return data.members ?? []
   },
 
-  createMembership: (
+  createMember: (
     orgId: string,
-    body: { user_id: string; role?: MembershipRole },
+    body: { user_id: string; role?: MemberRole },
   ) =>
-    apiFetch<Membership>(`${orgBase(orgId)}/memberships`, {
+    apiFetch<Member>(`${orgBase(orgId)}/members`, {
       method: "POST",
       body: JSON.stringify(body),
     }),
 
-  updateMembership: (
+  updateMember: (
     orgId: string,
-    membershipId: string,
-    body: { role?: MembershipRole; status?: MembershipStatus },
+    memberId: string,
+    body: { role?: MemberRole; status?: MemberStatus },
   ) =>
-    apiFetch<Membership>(`${orgBase(orgId)}/memberships/${membershipId}`, {
+    apiFetch<Member>(`${orgBase(orgId)}/members/${memberId}`, {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
 
-  deleteMembership: (orgId: string, membershipId: string) =>
-    apiFetch<void>(`${orgBase(orgId)}/memberships/${membershipId}`, {
+  deleteMember: (orgId: string, memberId: string) =>
+    apiFetch<void>(`${orgBase(orgId)}/members/${memberId}`, {
       method: "DELETE",
     }),
 
@@ -155,19 +168,69 @@ export const api = {
       { method: "DELETE" },
     ),
 
-  listApiKeys: async () => {
-    const data = await apiFetch<{ keys: ApiKeyListed[] }>("/api/keys")
-    return data.keys ?? []
+  listServiceAccounts: async (orgId: string) => {
+    const data = await apiFetch<{ service_accounts: ServiceAccount[] }>(
+      saBase(orgId),
+    )
+    return data.service_accounts ?? []
   },
 
-  createApiKey: (body: { name: string }) =>
-    apiFetch<ApiKeyCreated>("/api/keys", {
+  createServiceAccount: (orgId: string, body: { name: string }) =>
+    apiFetch<ServiceAccount>(saBase(orgId), {
       method: "POST",
       body: JSON.stringify(body),
     }),
 
-  deleteApiKey: (id: string) =>
-    apiFetch<{ revoked: boolean }>(`/api/keys/${id}`, {
+  updateServiceAccount: (
+    orgId: string,
+    saId: string,
+    body: { name?: string; disabled?: boolean },
+  ) =>
+    apiFetch<ServiceAccount>(`${saBase(orgId)}/${saId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  deleteServiceAccount: (orgId: string, saId: string) =>
+    apiFetch<void>(`${saBase(orgId)}/${saId}`, { method: "DELETE" }),
+
+  listApiKeys: async (userId: string) => {
+    const data = await apiFetch<{ keys: ApiKeyListed[] }>(
+      userKeysBase(userId),
+    )
+    return data.keys ?? []
+  },
+
+  createApiKey: (userId: string, body: { name: string }) =>
+    apiFetch<ApiKeyCreated>(userKeysBase(userId), {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  deleteApiKey: (userId: string, id: string) =>
+    apiFetch<void>(`${userKeysBase(userId)}/${id}`, {
+      method: "DELETE",
+    }),
+
+  listMemberApiKeys: async (orgId: string, memberId: string) => {
+    const data = await apiFetch<{ keys: ApiKeyListed[] }>(
+      memberKeysBase(orgId, memberId),
+    )
+    return data.keys ?? []
+  },
+
+  createMemberApiKey: (
+    orgId: string,
+    memberId: string,
+    body: { name: string },
+  ) =>
+    apiFetch<ApiKeyCreated>(memberKeysBase(orgId, memberId), {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  deleteMemberApiKey: (orgId: string, memberId: string, keyId: string) =>
+    apiFetch<void>(`${memberKeysBase(orgId, memberId)}/${keyId}`, {
       method: "DELETE",
     }),
 

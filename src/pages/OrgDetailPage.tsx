@@ -3,15 +3,18 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 import { api } from "../api/endpoints"
 import { ApiError } from "../api/client"
 import type {
-  Membership,
-  MembershipRole,
+  Member,
+  MemberRole,
   Organization,
   Profile,
+  ServiceAccount,
 } from "../api/types"
 import { ErrorAlert } from "../components/ErrorAlert"
+import { MemberKeysPanel } from "../components/MemberKeysPanel"
 import { useOrg } from "../org/OrgContext"
 
-const ROLES: MembershipRole[] = ["member", "admin", "owner"]
+const HUMAN_ROLES: MemberRole[] = ["member", "admin", "owner"]
+const SA_ROLES: MemberRole[] = ["member", "admin"]
 
 export function OrgDetailPage() {
   const { orgId = "" } = useParams()
@@ -19,7 +22,8 @@ export function OrgDetailPage() {
   const { refresh: refreshOrgs, setActiveOrgId, activeOrg } = useOrg()
 
   const [org, setOrg] = useState<Organization | null>(null)
-  const [memberships, setMemberships] = useState<Membership[]>([])
+  const [members, setMembers] = useState<Member[]>([])
+  const [serviceAccounts, setServiceAccounts] = useState<ServiceAccount[]>([])
   const [me, setMe] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>(null)
@@ -30,8 +34,13 @@ export function OrgDetailPage() {
   const [saved, setSaved] = useState(false)
 
   const [memberUserId, setMemberUserId] = useState("")
-  const [memberRole, setMemberRole] = useState<MembershipRole>("member")
+  const [memberRole, setMemberRole] = useState<MemberRole>("member")
   const [adding, setAdding] = useState(false)
+
+  const [saName, setSaName] = useState("")
+  const [creatingSa, setCreatingSa] = useState(false)
+
+  const [keysMemberId, setKeysMemberId] = useState<string | null>(null)
 
   const [probeOrgId, setProbeOrgId] = useState("")
   const [probing, setProbing] = useState(false)
@@ -41,20 +50,23 @@ export function OrgDetailPage() {
     setLoading(true)
     setError(null)
     try {
-      const [o, m, profile] = await Promise.all([
+      const [o, m, sas, profile] = await Promise.all([
         api.getOrganization(id),
-        api.listMemberships(id),
+        api.listMembers(id),
+        api.listServiceAccounts(id),
         api.getProfileMe(),
       ])
       setOrg(o)
       setName(o.name)
       setSlug(o.slug)
-      setMemberships(m)
+      setMembers(m)
+      setServiceAccounts(sas)
       setMe(profile)
     } catch (e) {
       setError(e)
       setOrg(null)
-      setMemberships([])
+      setMembers([])
+      setServiceAccounts([])
     } finally {
       setLoading(false)
     }
@@ -64,6 +76,10 @@ export function OrgDetailPage() {
     if (!orgId) return
     void load(orgId)
   }, [orgId])
+
+  const myMember = members.find(
+    (m) => m.principal === "user" && m.user_id === me?.user_id,
+  )
 
   async function onSave(e: FormEvent) {
     e.preventDefault()
@@ -113,12 +129,12 @@ export function OrgDetailPage() {
     setAdding(true)
     setError(null)
     try {
-      await api.createMembership(org.id, {
+      await api.createMember(org.id, {
         user_id: memberUserId.trim(),
         role: memberRole,
       })
       setMemberUserId("")
-      setMemberships(await api.listMemberships(org.id))
+      setMembers(await api.listMembers(org.id))
     } catch (err) {
       setError(err)
     } finally {
@@ -126,12 +142,12 @@ export function OrgDetailPage() {
     }
   }
 
-  async function onRole(m: Membership, role: MembershipRole) {
+  async function onRole(m: Member, role: MemberRole) {
     if (!org || m.role === role) return
     setError(null)
     try {
-      const updated = await api.updateMembership(org.id, m.id, { role })
-      setMemberships((prev) =>
+      const updated = await api.updateMember(org.id, m.id, { role })
+      setMembers((prev) =>
         prev.map((x) => (x.id === updated.id ? updated : x)),
       )
     } catch (err) {
@@ -139,13 +155,88 @@ export function OrgDetailPage() {
     }
   }
 
-  async function onRemove(m: Membership) {
+  async function onRemove(m: Member) {
     if (!org) return
-    if (!confirm(`Remove user ${m.user_id}?`)) return
+    const label =
+      m.principal === "service_account"
+        ? (serviceAccounts.find((s) => s.id === m.service_account_id)?.name ??
+          m.service_account_id)
+        : m.user_id
+    if (!confirm(`Remove member ${label ?? m.id}?`)) return
     setError(null)
     try {
-      await api.deleteMembership(org.id, m.id)
-      setMemberships(await api.listMemberships(org.id))
+      await api.deleteMember(org.id, m.id)
+      const [mList, saList] = await Promise.all([
+        api.listMembers(org.id),
+        api.listServiceAccounts(org.id),
+      ])
+      setMembers(mList)
+      setServiceAccounts(saList)
+      if (keysMemberId === m.id) setKeysMemberId(null)
+    } catch (err) {
+      setError(err)
+    }
+  }
+
+  async function onCreateSa(e: FormEvent) {
+    e.preventDefault()
+    if (!org) return
+    setCreatingSa(true)
+    setError(null)
+    try {
+      await api.createServiceAccount(org.id, { name: saName.trim() })
+      setSaName("")
+      const [mList, saList] = await Promise.all([
+        api.listMembers(org.id),
+        api.listServiceAccounts(org.id),
+      ])
+      setMembers(mList)
+      setServiceAccounts(saList)
+    } catch (err) {
+      setError(err)
+    } finally {
+      setCreatingSa(false)
+    }
+  }
+
+  async function onToggleSa(sa: ServiceAccount) {
+    if (!org) return
+    const disable = !sa.disabled_at
+    if (
+      !confirm(
+        disable
+          ? `Disable service account "${sa.name}"?`
+          : `Re-enable service account "${sa.name}"?`,
+      )
+    )
+      return
+    setError(null)
+    try {
+      await api.updateServiceAccount(org.id, sa.id, { disabled: disable })
+      setServiceAccounts(await api.listServiceAccounts(org.id))
+    } catch (err) {
+      setError(err)
+    }
+  }
+
+  async function onDeleteSa(sa: ServiceAccount) {
+    if (!org) return
+    if (
+      !confirm(
+        `Delete service account "${sa.name}"? Removes its member row and keys.`,
+      )
+    )
+      return
+    setError(null)
+    try {
+      await api.deleteServiceAccount(org.id, sa.id)
+      const [mList, saList] = await Promise.all([
+        api.listMembers(org.id),
+        api.listServiceAccounts(org.id),
+      ])
+      setMembers(mList)
+      setServiceAccounts(saList)
+      if (keysMemberId === sa.member_id) setKeysMemberId(null)
     } catch (err) {
       setError(err)
     }
@@ -188,6 +279,14 @@ export function OrgDetailPage() {
     }
   }
 
+  function memberLabel(m: Member): string {
+    if (m.principal === "service_account") {
+      const sa = serviceAccounts.find((s) => s.id === m.service_account_id)
+      return sa?.name ?? m.service_account_id ?? m.id
+    }
+    return m.user_id ?? m.id
+  }
+
   if (loading) {
     return <div className="text-muted">Loading…</div>
   }
@@ -200,6 +299,10 @@ export function OrgDetailPage() {
       </>
     )
   }
+
+  const keysMember = keysMemberId
+    ? members.find((m) => m.id === keysMemberId)
+    : null
 
   return (
     <div>
@@ -279,6 +382,100 @@ export function OrgDetailPage() {
             </div>
           </div>
 
+          <div className="card mb-3">
+            <div className="card-header">Service accounts</div>
+            <div className="card-body">
+              <p className="small text-muted">
+                Non-human org principals. Create adds an SA + active member
+                (default role <code>member</code>). Cannot be{" "}
+                <code>owner</code>. Admin/owner only.
+              </p>
+              <div className="list-group mb-3">
+                {serviceAccounts.length === 0 && (
+                  <div className="list-group-item text-muted">None yet.</div>
+                )}
+                {serviceAccounts.map((sa) => (
+                  <div
+                    key={sa.id}
+                    className="list-group-item d-flex flex-wrap gap-2 justify-content-between align-items-start"
+                  >
+                    <div>
+                      <div className="fw-semibold">
+                        {sa.name}{" "}
+                        {sa.disabled_at && (
+                          <span className="badge text-bg-secondary">
+                            disabled
+                          </span>
+                        )}
+                      </div>
+                      <div className="small font-monospace text-muted">
+                        sa {sa.id}
+                      </div>
+                      <div className="small font-monospace text-muted">
+                        member {sa.member_id}
+                      </div>
+                    </div>
+                    <div className="d-flex flex-wrap gap-1">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-primary"
+                        onClick={() =>
+                          setKeysMemberId((cur) =>
+                            cur === sa.member_id ? null : sa.member_id,
+                          )
+                        }
+                      >
+                        Keys
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={() => void onToggleSa(sa)}
+                      >
+                        {sa.disabled_at ? "Enable" : "Disable"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger"
+                        onClick={() => void onDeleteSa(sa)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <form
+                className="row g-2 align-items-end"
+                onSubmit={(e) => void onCreateSa(e)}
+              >
+                <div className="col">
+                  <label className="form-label" htmlFor="sa_name">
+                    Name
+                  </label>
+                  <input
+                    id="sa_name"
+                    className="form-control"
+                    value={saName}
+                    onChange={(e) => setSaName(e.target.value)}
+                    required
+                    maxLength={128}
+                    placeholder="deploy-bot"
+                  />
+                </div>
+                <div className="col-auto">
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={creatingSa || !saName.trim()}
+                  >
+                    {creatingSa ? "…" : "Create"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
           <div className="card border-danger">
             <div className="card-header text-danger">Danger zone</div>
             <div className="card-body">
@@ -297,58 +494,118 @@ export function OrgDetailPage() {
         </div>
 
         <div className="col-lg-7 mb-4">
-          <h2 className="h5">Memberships</h2>
+          <h2 className="h5">Members</h2>
           <p className="small text-muted">
             Platform API. Your user id:{" "}
             <code className="user-select-all">{me?.user_id ?? "…"}</code>
             {" — "}add another user’s id (from their Profile page) to demo
-            multi-user access.
+            multi-user access. SA members appear here too (
+            <code>principal=service_account</code>).
           </p>
 
           <div className="list-group mb-3">
-            {memberships.length === 0 && (
+            {members.length === 0 && (
               <div className="list-group-item text-muted">No members.</div>
             )}
-            {memberships.map((m) => (
-              <div
-                key={m.id}
-                className="list-group-item d-flex flex-wrap gap-2 justify-content-between align-items-center"
-              >
-                <div>
-                  <div className="font-monospace small">{m.user_id}</div>
-                  <div className="small text-muted">
-                    {m.status} · {m.id}
+            {members.map((m) => {
+              const roles =
+                m.principal === "service_account" ? SA_ROLES : HUMAN_ROLES
+              const isMe =
+                m.principal === "user" && m.user_id === me?.user_id
+              return (
+                <div
+                  key={m.id}
+                  className="list-group-item d-flex flex-wrap gap-2 justify-content-between align-items-center"
+                >
+                  <div>
+                    <div className="d-flex flex-wrap align-items-center gap-2">
+                      <span className="font-monospace small">
+                        {memberLabel(m)}
+                      </span>
+                      <span
+                        className={`badge ${
+                          m.principal === "service_account"
+                            ? "text-bg-info"
+                            : "text-bg-light border"
+                        }`}
+                      >
+                        {m.principal}
+                      </span>
+                      {isMe && (
+                        <span className="badge text-bg-primary">you</span>
+                      )}
+                    </div>
+                    <div className="small text-muted">
+                      {m.status} · member {m.id}
+                    </div>
+                  </div>
+                  <div className="d-flex gap-2 align-items-center">
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${
+                        keysMemberId === m.id
+                          ? "btn-primary"
+                          : "btn-outline-primary"
+                      }`}
+                      onClick={() =>
+                        setKeysMemberId((cur) => (cur === m.id ? null : m.id))
+                      }
+                    >
+                      Keys
+                    </button>
+                    <select
+                      className="form-select form-select-sm"
+                      style={{ width: "auto" }}
+                      value={m.role}
+                      onChange={(e) =>
+                        void onRole(m, e.target.value as MemberRole)
+                      }
+                    >
+                      {!roles.includes(m.role) && (
+                        <option value={m.role}>{m.role}</option>
+                      )}
+                      {roles.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-danger"
+                      onClick={() => void onRemove(m)}
+                    >
+                      Remove
+                    </button>
                   </div>
                 </div>
-                <div className="d-flex gap-2 align-items-center">
-                  <select
-                    className="form-select form-select-sm"
-                    style={{ width: "auto" }}
-                    value={m.role}
-                    onChange={(e) =>
-                      void onRole(m, e.target.value as MembershipRole)
-                    }
-                  >
-                    {ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-danger"
-                    onClick={() => void onRemove(m)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
+          {keysMember && (
+            <div className="mb-4">
+              <MemberKeysPanel
+                orgId={org.id}
+                memberId={keysMember.id}
+                label={memberLabel(keysMember)}
+              />
+              <p className="small text-muted mt-2 mb-0">
+                Human: self or admin/owner. SA: admin/owner only. Try keys on{" "}
+                <Link to="/api-keys">API keys</Link> probe (org-scope path).
+              </p>
+            </div>
+          )}
+
+          {myMember && !keysMemberId && (
+            <p className="small text-muted mb-3">
+              Tip: open <strong>Keys</strong> on your row or a service account
+              to mint <code>plat5-mk-1-</code> keys for org-scope automation.
+            </p>
+          )}
+
           <div className="card mb-4">
-            <div className="card-header">Add member</div>
+            <div className="card-header">Add user member</div>
             <div className="card-body">
               <form
                 className="row g-2 align-items-end"
@@ -376,10 +633,10 @@ export function OrgDetailPage() {
                     className="form-select"
                     value={memberRole}
                     onChange={(e) =>
-                      setMemberRole(e.target.value as MembershipRole)
+                      setMemberRole(e.target.value as MemberRole)
                     }
                   >
-                    {ROLES.map((r) => (
+                    {HUMAN_ROLES.map((r) => (
                       <option key={r} value={r}>
                         {r}
                       </option>

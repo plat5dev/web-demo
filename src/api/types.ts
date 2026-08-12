@@ -25,31 +25,40 @@ export type Organization = {
   updated_at: string
 }
 
-export type MembershipRole = "member" | "admin" | "owner"
+export type MemberRole = "member" | "admin" | "owner"
 
-export type MembershipStatus =
+export type MemberStatus =
   | "pending"
   | "active"
   | "suspended"
   | "removed"
 
-export type Membership = {
+export type Member = {
   id: string
   organization_id: string
-  user_id: string
-  role: MembershipRole
-  status: MembershipStatus
+  principal: "user" | "service_account"
+  user_id: string | null
+  service_account_id: string | null
+  role: MemberRole
+  status: MemberStatus
   invited_by: string | null
   created_at: string
   updated_at: string
 }
+
+/** @deprecated use Member */
+export type Membership = Member
+/** @deprecated use MemberRole */
+export type MembershipRole = MemberRole
+/** @deprecated use MemberStatus */
+export type MembershipStatus = MemberStatus
 
 export type Project = {
   id: string
   organization_id: string
   name: string
   description: string
-  created_by_membership_id: string
+  created_by_member_id: string
   created_at: string
   updated_at: string
 }
@@ -62,7 +71,18 @@ export type Task = {
   project_id: string
   title: string
   status: TaskStatus
-  created_by_membership_id: string
+  created_by_member_id: string
+  created_at: string
+  updated_at: string
+}
+
+export type ServiceAccount = {
+  id: string
+  organization_id: string
+  member_id: string
+  name: string
+  disabled_at: string | null
+  created_by_user_id: string | null
   created_at: string
   updated_at: string
 }

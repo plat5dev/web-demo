@@ -1,12 +1,20 @@
 import { useEffect, useState, type FormEvent } from "react"
+import { Link } from "react-router-dom"
 import { api } from "../api/endpoints"
 import type { ApiKeyCreated, ApiKeyListed } from "../api/types"
 import { ApiError } from "../api/client"
 import { ErrorAlert } from "../components/ErrorAlert"
 import { useOrg } from "../org/OrgContext"
 
+type ProbeRow = {
+  label: string
+  path: string
+  expect: string
+}
+
 export function ApiKeysPage() {
   const { activeOrg } = useOrg()
+  const [userId, setUserId] = useState<string | null>(null)
   const [keys, setKeys] = useState<ApiKeyListed[]>([])
   const [name, setName] = useState("")
   const [loading, setLoading] = useState(true)
@@ -17,12 +25,14 @@ export function ApiKeysPage() {
   const [tryPath, setTryPath] = useState("/api/organizations")
   const [trying, setTrying] = useState(false)
   const [tryResult, setTryResult] = useState<string | null>(null)
+  const [matrixRunning, setMatrixRunning] = useState(false)
+  const [matrixResult, setMatrixResult] = useState<string | null>(null)
 
-  async function load() {
+  async function load(uid: string) {
     setLoading(true)
     setError(null)
     try {
-      setKeys(await api.listApiKeys())
+      setKeys(await api.listApiKeys(uid))
     } catch (e) {
       setError(e)
       setKeys([])
@@ -32,7 +42,19 @@ export function ApiKeysPage() {
   }
 
   useEffect(() => {
-    void load()
+    void (async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const profile = await api.getProfileMe()
+        setUserId(profile.user_id)
+        await load(profile.user_id)
+      } catch (e) {
+        setError(e)
+        setKeys([])
+        setLoading(false)
+      }
+    })()
   }, [])
 
   useEffect(() => {
@@ -47,11 +69,12 @@ export function ApiKeysPage() {
     setError(null)
     setCreated(null)
     try {
-      const key = await api.createApiKey({ name: name.trim() })
+      if (!userId) throw new Error("missing user id")
+      const key = await api.createApiKey(userId, { name: name.trim() })
       setName("")
       setCreated(key)
       setTryKey(key.key)
-      await load()
+      await load(userId)
     } catch (err) {
       setError(err)
     } finally {
@@ -63,11 +86,33 @@ export function ApiKeysPage() {
     if (!confirm("Revoke this API key?")) return
     setError(null)
     try {
-      await api.deleteApiKey(id)
+      if (!userId) throw new Error("missing user id")
+      await api.deleteApiKey(userId, id)
       if (created?.id === id) setCreated(null)
-      await load()
+      await load(userId)
     } catch (err) {
       setError(err)
+    }
+  }
+
+  async function runProbe(path: string, key: string): Promise<string> {
+    try {
+      const data = await api.probe<unknown>(path, {
+        mode: "api-key",
+        apiKey: key,
+      })
+      return `HTTP 200\n${JSON.stringify(data, null, 2)}`
+    } catch (err) {
+      if (err instanceof ApiError) {
+        return [
+          `HTTP ${err.status} ${err.code}`,
+          err.message,
+          err.requestId ? `request_id=${err.requestId}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n")
+      }
+      throw err
     }
   }
 
@@ -78,41 +123,95 @@ export function ApiKeysPage() {
     setTryResult(null)
     setError(null)
     try {
-      const data = await api.probe<unknown>(tryPath.trim(), {
-        mode: "api-key",
-        apiKey: tryKey.trim(),
-      })
-      setTryResult(JSON.stringify(data, null, 2))
+      setTryResult(await runProbe(tryPath.trim(), tryKey.trim()))
     } catch (err) {
-      if (err instanceof ApiError) {
-        setTryResult(
-          JSON.stringify(
-            {
-              status: err.status,
-              code: err.code,
-              message: err.message,
-              request_id: err.requestId,
-              body: err.body,
-            },
-            null,
-            2,
-          ),
-        )
-      } else {
-        setError(err)
-      }
+      setError(err)
     } finally {
       setTrying(false)
     }
   }
 
+  function probeRows(key: string): ProbeRow[] {
+    const isMemberKey = key.startsWith("plat5-mk-1-")
+    const orgPath = activeOrg
+      ? `/api/organizations/${activeOrg.id}/projects`
+      : null
+    const wrongOrgPath =
+      "/api/organizations/01ARZ3NDEKTSV4RRFFQ69G5FAV/projects"
+    const userPath = userId
+      ? `/api/users/${userId}/api-keys`
+      : "/api/organizations"
+
+    const rows: ProbeRow[] = [
+      {
+        label: "user-scope",
+        path: userPath,
+        expect: isMemberKey
+          ? "401 (member keys invalid on user scope)"
+          : "200 (user key)",
+      },
+    ]
+    if (orgPath) {
+      rows.push({
+        label: "org-scope (active org)",
+        path: orgPath,
+        expect: isMemberKey
+          ? "200 if key’s member is in this org"
+          : "200 if you are an active member (resolve)",
+      })
+    }
+    rows.push({
+      label: "org-scope (unknown org)",
+      path: wrongOrgPath,
+      expect: isMemberKey
+        ? "404 (org id ≠ key org) or 401"
+        : "404 (not a member)",
+    })
+    return rows
+  }
+
+  async function onMatrix() {
+    const key = tryKey.trim()
+    if (!key) return
+    setMatrixRunning(true)
+    setMatrixResult(null)
+    setError(null)
+    try {
+      const rows = probeRows(key)
+      const kind = key.startsWith("plat5-mk-1-")
+        ? "member key (plat5-mk-1-)"
+        : key.startsWith("plat5-sk-1-")
+          ? "user key (plat5-sk-1-)"
+          : "unknown prefix"
+      const parts: string[] = [`Key kind: ${kind}`, ""]
+      for (const row of rows) {
+        const result = await runProbe(row.path, key)
+        parts.push(`### ${row.label}`)
+        parts.push(`GET ${row.path}`)
+        parts.push(`expect: ${row.expect}`)
+        parts.push(result)
+        parts.push("")
+      }
+      setMatrixResult(parts.join("\n"))
+    } catch (err) {
+      setError(err)
+    } finally {
+      setMatrixRunning(false)
+    }
+  }
+
   return (
     <div>
-      <h1 className="h3 mb-1">API keys</h1>
+      <h1 className="h3 mb-1">User API keys</h1>
       <p className="text-muted small mb-3">
-        Platform API (<code>/api/keys</code>, user scope). Same gateway scopes
-        as JWT — send <code>X-API-Key</code> instead of{" "}
-        <code>Authorization: Bearer</code>. Plaintext shown once on create.
+        Person credentials (<code>/api/users/{"{user_id}"}/api-keys</code>,
+        prefix <code>plat5-sk-1-</code>). Same gateway as JWT via{" "}
+        <code>X-API-Key</code>. Member keys (<code>plat5-mk-1-</code>) are
+        minted on{" "}
+        <Link to={activeOrg ? `/orgs/${activeOrg.id}` : "/orgs"}>
+          org detail
+        </Link>{" "}
+        under a member or service account — paste them below to compare scopes.
       </p>
 
       <ErrorAlert error={error} onDismiss={() => setError(null)} />
@@ -134,7 +233,7 @@ export function ApiKeysPage() {
 
       <div className="row">
         <div className="col-lg-6 mb-4">
-          <h2 className="h5">Your keys</h2>
+          <h2 className="h5">Your user keys</h2>
           {loading && <div className="text-muted">Loading…</div>}
           <div className="list-group">
             {!loading && keys.length === 0 && (
@@ -174,7 +273,7 @@ export function ApiKeysPage() {
           </div>
 
           <div className="card mt-3">
-            <div className="card-header">Create key</div>
+            <div className="card-header">Create user key</div>
             <div className="card-body">
               <form onSubmit={(e) => void onCreate(e)}>
                 <div className="mb-3">
@@ -194,7 +293,7 @@ export function ApiKeysPage() {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={creating || !name.trim()}
+                  disabled={creating || !name.trim() || !userId}
                 >
                   {creating ? "Creating…" : "Create"}
                 </button>
@@ -207,7 +306,8 @@ export function ApiKeysPage() {
           <h2 className="h5">Try with X-API-Key</h2>
           <p className="small text-muted">
             Calls the gateway with only <code>X-API-Key</code> (no session
-            JWT). Use a freshly created key.
+            JWT). User keys work on user + org (via member resolve). Member
+            keys work on <strong>org scope only</strong>.
           </p>
           <form className="card card-body" onSubmit={(e) => void onTry(e)}>
             <div className="mb-3">
@@ -219,7 +319,7 @@ export function ApiKeysPage() {
                 className="form-control font-monospace"
                 value={tryKey}
                 onChange={(e) => setTryKey(e.target.value)}
-                placeholder="plat5-sk-1-…"
+                placeholder="plat5-sk-1-… or plat5-mk-1-…"
                 required
               />
             </div>
@@ -234,25 +334,77 @@ export function ApiKeysPage() {
                 onChange={(e) => setTryPath(e.target.value)}
                 required
               />
-              <div className="form-text">
-                Examples: <code>/api/organizations</code>,{" "}
-                <code>/api/keys</code>, org projects path
+              <div className="form-text d-flex flex-wrap gap-2 mt-2">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => setTryPath("/api/organizations")}
+                >
+                  list orgs
+                </button>
+                {userId && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() =>
+                      setTryPath(`/api/users/${userId}/api-keys`)
+                    }
+                  >
+                    user keys
+                  </button>
+                )}
+                {activeOrg && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() =>
+                      setTryPath(
+                        `/api/organizations/${activeOrg.id}/projects`,
+                      )
+                    }
+                  >
+                    active org projects
+                  </button>
+                )}
               </div>
             </div>
-            <button
-              type="submit"
-              className="btn btn-outline-primary"
-              disabled={trying || !tryKey.trim()}
-            >
-              {trying ? "Calling…" : "GET"}
-            </button>
+            <div className="d-flex flex-wrap gap-2">
+              <button
+                type="submit"
+                className="btn btn-outline-primary"
+                disabled={trying || !tryKey.trim()}
+              >
+                {trying ? "Calling…" : "GET path"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={matrixRunning || !tryKey.trim()}
+                onClick={() => void onMatrix()}
+              >
+                {matrixRunning ? "Running…" : "Run scope matrix"}
+              </button>
+            </div>
           </form>
+          {!activeOrg && (
+            <p className="small text-muted mt-2 mb-0">
+              Select an active org in the nav for the org-scope matrix row.
+            </p>
+          )}
           {tryResult && (
             <pre
               className="mt-3 p-3 bg-body-secondary rounded small overflow-auto"
-              style={{ maxHeight: "24rem" }}
+              style={{ maxHeight: "16rem" }}
             >
               {tryResult}
+            </pre>
+          )}
+          {matrixResult && (
+            <pre
+              className="mt-3 p-3 bg-body-secondary rounded small overflow-auto"
+              style={{ maxHeight: "28rem" }}
+            >
+              {matrixResult}
             </pre>
           )}
         </div>

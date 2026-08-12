@@ -38,7 +38,7 @@ export function OrgsPage() {
         <p className="text-muted small">
           Platform API (<code>/api/organizations</code>, user scope). Active
           org is used for projects/tasks (organization scope). Open an org for
-          memberships and admission probe.
+          members and admission probe.
         </p>
         <ErrorAlert error={error} onDismiss={() => setError(null)} />
 

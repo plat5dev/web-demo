@@ -14,9 +14,8 @@ export function HomePage() {
           <img src="/logo.jpg" alt="Plat5" className="home-logo mb-3" />
           <h1 className="display-6">Plat5 web demo</h1>
           <p className="lead mb-3">
-            Sample SPA against the gateway: OIDC login, API keys, orgs +
-            memberships, and org-scoped projects/tasks from the Bun + Effect
-            template API.
+            Sample SPA against the gateway: OIDC login, user/member API keys,
+            orgs + members + service accounts, and org-scoped projects/tasks.
           </p>
           {!authenticated ? (
             <button
@@ -35,7 +34,7 @@ export function HomePage() {
                 Organizations
               </Link>
               <Link className="btn btn-outline-primary" to="/api-keys">
-                API keys
+                User API keys
               </Link>
               <Link
                 className="btn btn-primary"
@@ -55,12 +54,16 @@ export function HomePage() {
               <strong>OIDC + PKCE</strong> → JWT on every gateway call
             </li>
             <li className="list-group-item">
-              <strong>API keys</strong> → same scopes via{" "}
-              <code>X-API-Key</code>
+              <strong>User API keys</strong> (<code>plat5-sk-1-</code>) → user
+              + org scope via <code>X-API-Key</code>
             </li>
             <li className="list-group-item">
-              <strong>Orgs + memberships</strong> → platform identity; admission
-              probe shows non-member <code>404</code>
+              <strong>Member API keys</strong> (<code>plat5-mk-1-</code>) → org
+              scope only; mint on a member or service account
+            </li>
+            <li className="list-group-item">
+              <strong>Orgs + members + service accounts</strong> → identity;
+              admission probe shows non-member <code>404</code>
             </li>
             <li className="list-group-item">
               <strong>Projects / tasks</strong> → template business API
@@ -83,7 +86,8 @@ export function HomePage() {
               Template API on <code>:3000</code> with routes applied
             </li>
             <li className="list-group-item">
-              Create an organization → members / API keys → projects &amp; tasks
+              Create an org → SA + member keys → user keys probe matrix →
+              projects &amp; tasks
             </li>
           </ul>
         </div>
