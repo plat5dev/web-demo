@@ -27,11 +27,7 @@ export type Organization = {
 
 export type MemberRole = "member" | "admin" | "owner"
 
-export type MemberStatus =
-  | "pending"
-  | "active"
-  | "suspended"
-  | "removed"
+export type MemberStatus = "active" | "suspended" | "removed"
 
 export type Member = {
   id: string
@@ -41,7 +37,7 @@ export type Member = {
   service_account_id: string | null
   role: MemberRole
   status: MemberStatus
-  invited_by: string | null
+  added_by: string | null
   created_at: string
   updated_at: string
 }
