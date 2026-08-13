@@ -51,7 +51,7 @@ export const api = {
   createOrganization: (body: { name: string; slug?: string }) =>
     apiFetch<Organization>("/api/organizations", {
       method: "POST",
-      body: JSON.stringify({ ...body, settings: {} }),
+      body: JSON.stringify(body),
     }),
 
   updateOrganization: (

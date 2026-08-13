@@ -20,7 +20,6 @@ export type Organization = {
   id: string
   name: string
   slug: string
-  settings: Record<string, unknown>
   created_at: string
   updated_at: string
 }
