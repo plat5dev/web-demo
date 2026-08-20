@@ -13,4 +13,8 @@ export const config = {
     `${window.location.origin}/callback`,
   ),
   authAudience: (import.meta.env.VITE_AUTH_AUDIENCE as string | undefined) || undefined,
+  apiKeyBrand: required("VITE_APIKEY_BRAND", "plat5"),
 } as const
+
+export const userKeyPrefix = `${config.apiKeyBrand}-sk-1-`
+export const memberKeyPrefix = `${config.apiKeyBrand}-mk-1-`

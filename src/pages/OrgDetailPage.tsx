@@ -12,6 +12,7 @@ import type {
 import { ErrorAlert } from "../components/ErrorAlert"
 import { MemberKeysPanel } from "../components/MemberKeysPanel"
 import { useOrg } from "../org/OrgContext"
+import { memberKeyPrefix } from "../config"
 
 const HUMAN_ROLES: MemberRole[] = ["member", "admin", "owner"]
 const SA_ROLES: MemberRole[] = ["member", "admin"]
@@ -607,7 +608,7 @@ export function OrgDetailPage() {
           {myMember && !keysMemberId && (
             <p className="small text-muted mb-3">
               Tip: open <strong>Keys</strong> on your row or a service account
-              to mint <code>plat5-mk-1-</code> keys for org-scope automation.
+              to mint <code>{memberKeyPrefix}</code> keys for org-scope automation.
             </p>
           )}
 

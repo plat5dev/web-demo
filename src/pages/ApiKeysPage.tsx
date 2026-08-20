@@ -5,6 +5,7 @@ import type { ApiKeyCreated, ApiKeyListed } from "../api/types"
 import { ApiError } from "../api/client"
 import { ErrorAlert } from "../components/ErrorAlert"
 import { useOrg } from "../org/OrgContext"
+import { memberKeyPrefix, userKeyPrefix } from "../config"
 
 type ProbeRow = {
   label: string
@@ -132,7 +133,7 @@ export function ApiKeysPage() {
   }
 
   function probeRows(key: string): ProbeRow[] {
-    const isMemberKey = key.startsWith("plat5-mk-1-")
+    const isMemberKey = key.startsWith(memberKeyPrefix)
     const orgPath = activeOrg
       ? `/api/organizations/${activeOrg.id}/projects`
       : null
@@ -178,10 +179,10 @@ export function ApiKeysPage() {
     setError(null)
     try {
       const rows = probeRows(key)
-      const kind = key.startsWith("plat5-mk-1-")
-        ? "member key (plat5-mk-1-)"
-        : key.startsWith("plat5-sk-1-")
-          ? "user key (plat5-sk-1-)"
+      const kind = key.startsWith(memberKeyPrefix)
+        ? `member key (${memberKeyPrefix})`
+        : key.startsWith(userKeyPrefix)
+          ? `user key (${userKeyPrefix})`
           : "unknown prefix"
       const parts: string[] = [`Key kind: ${kind}`, ""]
       for (const row of rows) {
@@ -205,8 +206,8 @@ export function ApiKeysPage() {
       <h1 className="h3 mb-1">User API keys</h1>
       <p className="text-muted small mb-3">
         Person credentials (<code>/api/users/{"{user_id}"}/api-keys</code>,
-        prefix <code>plat5-sk-1-</code>). Same gateway as JWT via{" "}
-        <code>X-API-Key</code>. Member keys (<code>plat5-mk-1-</code>) are
+        prefix <code>{userKeyPrefix}</code>). Same gateway as JWT via{" "}
+        <code>X-API-Key</code>. Member keys (<code>{memberKeyPrefix}</code>) are
         minted on{" "}
         <Link to={activeOrg ? `/orgs/${activeOrg.id}` : "/orgs"}>
           org detail
@@ -319,7 +320,7 @@ export function ApiKeysPage() {
                 className="form-control font-monospace"
                 value={tryKey}
                 onChange={(e) => setTryKey(e.target.value)}
-                placeholder="plat5-sk-1-… or plat5-mk-1-…"
+                placeholder={`${userKeyPrefix}… or ${memberKeyPrefix}…`}
                 required
               />
             </div>

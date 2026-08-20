@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom"
 import { useAuth } from "../auth/AuthContext"
 import { useOrg } from "../org/OrgContext"
-import { config } from "../config"
+import { config, memberKeyPrefix, userKeyPrefix } from "../config"
 
 export function HomePage() {
   const { authenticated, login } = useAuth()
@@ -54,11 +54,11 @@ export function HomePage() {
               <strong>OIDC + PKCE</strong> → JWT on every gateway call
             </li>
             <li className="list-group-item">
-              <strong>User API keys</strong> (<code>plat5-sk-1-</code>) → user
+              <strong>User API keys</strong> (<code>{userKeyPrefix}</code>) → user
               + org scope via <code>X-API-Key</code>
             </li>
             <li className="list-group-item">
-              <strong>Member API keys</strong> (<code>plat5-mk-1-</code>) → org
+              <strong>Member API keys</strong> (<code>{memberKeyPrefix}</code>) → org
               scope only; mint on a member or service account
             </li>
             <li className="list-group-item">

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react"
 import { api } from "../api/endpoints"
 import type { ApiKeyCreated, ApiKeyListed } from "../api/types"
 import { ErrorAlert } from "./ErrorAlert"
+import { memberKeyPrefix } from "../config"
 
 type Props = {
   orgId: string
@@ -78,7 +79,7 @@ export function MemberKeysPanel({
         Member keys · <span className="text-muted">{label}</span>
       </div>
       <p className="small text-muted mb-2">
-        Prefix <code>plat5-mk-1-</code> · org scope only (
+        Prefix <code>{memberKeyPrefix}</code> · org scope only (
         <code>X-API-Key</code>).
       </p>
 

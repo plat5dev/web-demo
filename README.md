@@ -39,6 +39,7 @@ Sign in → Auth password UI (dev codes in Auth issuer logs when SMTP unset) →
 | `VITE_AUTH_CLIENT_ID` | `plat5` |
 | `VITE_AUTH_REDIRECT_URI` | `http://localhost:5173/callback` |
 | `VITE_AUTH_AUDIENCE` | (unset) |
+| `VITE_APIKEY_BRAND` | `plat5` |
 
 ## Auth notes
 
