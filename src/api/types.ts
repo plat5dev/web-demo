@@ -76,7 +76,7 @@ export type ServiceAccount = {
   organization_id: string
   member_id: string
   name: string
-  disabled_at: string | null
+  status: MemberStatus
   created_by_user_id: string | null
   created_at: string
   updated_at: string

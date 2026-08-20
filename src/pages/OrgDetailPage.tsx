@@ -201,19 +201,26 @@ export function OrgDetailPage() {
 
   async function onToggleSa(sa: ServiceAccount) {
     if (!org) return
-    const disable = !sa.disabled_at
+    const suspend = sa.status === "active"
     if (
       !confirm(
-        disable
-          ? `Disable service account "${sa.name}"?`
+        suspend
+          ? `Suspend service account "${sa.name}"?`
           : `Re-enable service account "${sa.name}"?`,
       )
     )
       return
     setError(null)
     try {
-      await api.updateServiceAccount(org.id, sa.id, { disabled: disable })
-      setServiceAccounts(await api.listServiceAccounts(org.id))
+      await api.updateMember(org.id, sa.member_id, {
+        status: suspend ? "suspended" : "active",
+      })
+      const [mList, saList] = await Promise.all([
+        api.listMembers(org.id),
+        api.listServiceAccounts(org.id),
+      ])
+      setMembers(mList)
+      setServiceAccounts(saList)
     } catch (err) {
       setError(err)
     }
@@ -402,9 +409,9 @@ export function OrgDetailPage() {
                     <div>
                       <div className="fw-semibold">
                         {sa.name}{" "}
-                        {sa.disabled_at && (
+                        {sa.status === "suspended" && (
                           <span className="badge text-bg-secondary">
-                            disabled
+                            suspended
                           </span>
                         )}
                       </div>
@@ -432,7 +439,7 @@ export function OrgDetailPage() {
                         className="btn btn-sm btn-outline-secondary"
                         onClick={() => void onToggleSa(sa)}
                       >
-                        {sa.disabled_at ? "Enable" : "Disable"}
+                        {sa.status === "suspended" ? "Enable" : "Suspend"}
                       </button>
                       <button
                         type="button"

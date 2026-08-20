@@ -184,7 +184,7 @@ export const api = {
   updateServiceAccount: (
     orgId: string,
     saId: string,
-    body: { name?: string; disabled?: boolean },
+    body: { name: string },
   ) =>
     apiFetch<ServiceAccount>(`${saBase(orgId)}/${saId}`, {
       method: "PATCH",
