@@ -2,6 +2,7 @@ import { apiFetch, type FetchAuth } from "./client"
 import type {
   ApiKeyCreated,
   ApiKeyListed,
+  CreateApiKeyBody,
   InviteCreated,
   InviteListed,
   Member,
@@ -235,7 +236,7 @@ export const api = {
     return data.keys ?? []
   },
 
-  createApiKey: (userId: string, body: { name: string }) =>
+  createApiKey: (userId: string, body: CreateApiKeyBody) =>
     apiFetch<ApiKeyCreated>(userKeysBase(userId), {
       method: "POST",
       body: JSON.stringify(body),
@@ -256,7 +257,7 @@ export const api = {
   createMemberApiKey: (
     orgId: string,
     memberId: string,
-    body: { name: string },
+    body: CreateApiKeyBody,
   ) =>
     apiFetch<ApiKeyCreated>(memberKeysBase(orgId, memberId), {
       method: "POST",
