@@ -88,10 +88,18 @@ export type ApiKeyListed = {
   name: string
   created_at: string
   revoked_at: string | null
+  /** App-owned labels. `null`/omitted = unrestricted. List never includes the secret. */
+  scopes?: string[] | null
 }
 
 export type ApiKeyCreated = ApiKeyListed & {
   key: string
+}
+
+/** Mint JSON. Omit `scopes` for unrestricted; never send `null` or `[]`. */
+export type CreateApiKeyBody = {
+  name: string
+  scopes?: string[]
 }
 
 /** Mint response — token is returned once, like an API key. */
