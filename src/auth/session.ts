@@ -138,7 +138,7 @@ function peekInviteByState(state: string): string | null {
   return loadInviteByState()[state] ?? null
 }
 
-/** Cookie first, then (when `oauthState` is the CSRF nonce) the by-state stash. */
+/** Prefer the state-keyed stash (this PKCE), then the first-party cookie. */
 export function peekStashedInvite(oauthState?: string | null): string | null {
   if (oauthState) {
     const byState = peekInviteByState(oauthState)
