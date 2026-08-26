@@ -30,7 +30,7 @@ bun run dev            # http://localhost:5173
 
 Sign in → Auth password UI (dev codes in Auth issuer logs when SMTP unset) → profile / user API keys / orgs (members, copy-invite-link, service accounts, member keys, admission probe) / projects / tasks.
 
-Invite copy-link is `{origin}/login?invite={token}`. Opening it starts this browser’s PKCE flow and adds `invite=<token>` to Auth `/authorize` (a shared authorize URL cannot carry a per-browser `code_challenge`). Add-by-`user_id` still works. No SMTP.
+Invite copy-link is `{origin}/login?invite={token}`. Opening it stashes the token on this origin, starts this browser’s PKCE flow (Auth `/authorize` does **not** get `invite=`), then `POST /api/invites/redeem` with the logged-in user. Add-by-`user_id` still works. No SMTP.
 
 ## Env
 

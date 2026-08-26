@@ -99,8 +99,9 @@ export function InvitePanel({
         <p className="small text-muted">
           Mint a one-shot token (like an API key). Clipboard gets{" "}
           <code>/login?invite=</code> on this app origin. The invitee’s
-          browser starts PKCE and forwards <code>invite=</code> onto Auth{" "}
-          <code>/authorize</code> — not an Auth issuer URL. They land as an{" "}
+          browser stashes the token, starts PKCE (Auth is a plain IdP — no{" "}
+          <code>invite=</code> on <code>/authorize</code>), then{" "}
+          <code>POST /api/invites/redeem</code>. They land as an{" "}
           <strong>active</strong> member. No SMTP, no pending row.
           Add-by-user_id below still works. Expires in 7 days if omitted.
         </p>
