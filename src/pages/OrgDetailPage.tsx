@@ -3,8 +3,6 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 import { api } from "../api/endpoints"
 import { ApiError } from "../api/client"
 import type {
-  InviteCreated,
-  InviteListed,
   Member,
   MemberRole,
   Organization,
@@ -12,17 +10,13 @@ import type {
   ServiceAccount,
 } from "../api/types"
 import { ErrorAlert } from "../components/ErrorAlert"
+import { InvitePanel } from "../components/InvitePanel"
 import { MemberKeysPanel } from "../components/MemberKeysPanel"
 import { useOrg } from "../org/OrgContext"
 import { memberKeyPrefix } from "../config"
-import { INVITE_QUERY } from "../auth/session"
 
 const HUMAN_ROLES: MemberRole[] = ["member", "admin", "owner"]
 const SA_ROLES: MemberRole[] = ["member", "admin"]
-
-function inviteCopyLink(token: string): string {
-  return `${window.location.origin}/login?${INVITE_QUERY}=${token}`
-}
 
 export function OrgDetailPage() {
   const { orgId = "" } = useParams()
@@ -32,7 +26,6 @@ export function OrgDetailPage() {
   const [org, setOrg] = useState<Organization | null>(null)
   const [members, setMembers] = useState<Member[]>([])
   const [serviceAccounts, setServiceAccounts] = useState<ServiceAccount[]>([])
-  const [invites, setInvites] = useState<InviteListed[]>([])
   const [me, setMe] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>(null)
@@ -45,11 +38,6 @@ export function OrgDetailPage() {
   const [memberUserId, setMemberUserId] = useState("")
   const [memberRole, setMemberRole] = useState<MemberRole>("member")
   const [adding, setAdding] = useState(false)
-
-  const [inviteRole, setInviteRole] = useState<MemberRole>("member")
-  const [minting, setMinting] = useState(false)
-  const [createdInvite, setCreatedInvite] = useState<InviteCreated | null>(null)
-  const [copiedInvite, setCopiedInvite] = useState(false)
 
   const [saName, setSaName] = useState("")
   const [creatingSa, setCreatingSa] = useState(false)
@@ -64,12 +52,11 @@ export function OrgDetailPage() {
     setLoading(true)
     setError(null)
     try {
-      const [o, m, sas, profile, inviteList] = await Promise.all([
+      const [o, m, sas, profile] = await Promise.all([
         api.getOrganization(id),
         api.listMembers(id),
         api.listServiceAccounts(id),
         api.getProfileMe(),
-        api.listInvites(id),
       ])
       setOrg(o)
       setName(o.name)
@@ -77,13 +64,11 @@ export function OrgDetailPage() {
       setMembers(m)
       setServiceAccounts(sas)
       setMe(profile)
-      setInvites(inviteList)
     } catch (e) {
       setError(e)
       setOrg(null)
       setMembers([])
       setServiceAccounts([])
-      setInvites([])
     } finally {
       setLoading(false)
     }
@@ -156,48 +141,6 @@ export function OrgDetailPage() {
       setError(err)
     } finally {
       setAdding(false)
-    }
-  }
-
-  async function copyInviteLink(token: string) {
-    const link = inviteCopyLink(token)
-    try {
-      await navigator.clipboard.writeText(link)
-      setCopiedInvite(true)
-    } catch {
-      setCopiedInvite(false)
-    }
-  }
-
-  async function onMintInvite(e: FormEvent) {
-    e.preventDefault()
-    if (!org) return
-    setMinting(true)
-    setError(null)
-    setCreatedInvite(null)
-    setCopiedInvite(false)
-    try {
-      const created = await api.createInvite(org.id, { role: inviteRole })
-      setCreatedInvite(created)
-      await copyInviteLink(created.token)
-      setInvites(await api.listInvites(org.id))
-    } catch (err) {
-      setError(err)
-    } finally {
-      setMinting(false)
-    }
-  }
-
-  async function onRevokeInvite(invite: InviteListed) {
-    if (!org) return
-    if (!confirm(`Revoke invite ${invite.id}?`)) return
-    setError(null)
-    try {
-      await api.revokeInvite(org.id, invite.id)
-      if (createdInvite?.id === invite.id) setCreatedInvite(null)
-      setInvites(await api.listInvites(org.id))
-    } catch (err) {
-      setError(err)
     }
   }
 
@@ -670,6 +613,8 @@ export function OrgDetailPage() {
             </p>
           )}
 
+          <InvitePanel orgId={org.id} onError={setError} />
+
           <div className="card mb-4">
             <div className="card-header">Add user member</div>
             <div className="card-body">
@@ -716,132 +661,6 @@ export function OrgDetailPage() {
                     disabled={adding || !memberUserId.trim()}
                   >
                     {adding ? "…" : "Add"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-
-          <div className="card mb-4">
-            <div className="card-header">Copy invite link</div>
-            <div className="card-body">
-              <p className="small text-muted">
-                Mints a one-shot token. Share{" "}
-                <code>
-                  {`{app origin}/login?${INVITE_QUERY}=`}
-                </code>
-                — the recipient’s browser starts PKCE and forwards{" "}
-                <code>invite=</code> onto Auth <code>/authorize</code>. Not an
-                Auth issuer URL (no per-browser <code>code_challenge</code>).
-                Token is shown once, like an API key. List/revoke never include
-                it. No SMTP. Expires in 7 days if omitted.
-              </p>
-
-              {createdInvite && (
-                <div className="alert alert-warning py-2 small">
-                  <div className="fw-semibold mb-1">
-                    Copy now — token will not be shown again
-                  </div>
-                  <code className="user-select-all d-block text-break">
-                    {createdInvite.token}
-                  </code>
-                  <div className="small mt-2">
-                    Link{" "}
-                    <code className="user-select-all d-block text-break">
-                      {inviteCopyLink(createdInvite.token)}
-                    </code>
-                  </div>
-                  <div className="small text-muted mt-1">
-                    {createdInvite.role} · expires {createdInvite.expires_at} ·
-                    id{" "}
-                    <code className="font-monospace">{createdInvite.id}</code>
-                    {copiedInvite ? " · copied to clipboard" : ""}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-secondary mt-2"
-                    onClick={() => void copyInviteLink(createdInvite.token)}
-                  >
-                    Copy link
-                  </button>
-                </div>
-              )}
-
-              <div className="list-group mb-3">
-                {invites.length === 0 && (
-                  <div className="list-group-item text-muted">
-                    No invites yet.
-                  </div>
-                )}
-                {invites.map((inv) => (
-                  <div
-                    key={inv.id}
-                    className="list-group-item d-flex flex-wrap gap-2 justify-content-between align-items-start"
-                  >
-                    <div>
-                      <div className="fw-semibold">
-                        {inv.role}{" "}
-                        {inv.revoked_at && (
-                          <span className="badge text-bg-secondary">
-                            revoked
-                          </span>
-                        )}
-                        {inv.redeemed_at && (
-                          <span className="badge text-bg-success">
-                            redeemed
-                          </span>
-                        )}
-                      </div>
-                      <div className="small font-monospace text-muted">
-                        {inv.id}
-                      </div>
-                      <div className="small text-muted">
-                        expires {inv.expires_at}
-                      </div>
-                    </div>
-                    {!inv.revoked_at && !inv.redeemed_at && (
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-danger"
-                        onClick={() => void onRevokeInvite(inv)}
-                      >
-                        Revoke
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <form
-                className="row g-2 align-items-end"
-                onSubmit={(e) => void onMintInvite(e)}
-              >
-                <div className="col-md-4">
-                  <label className="form-label" htmlFor="invite_role">
-                    Role
-                  </label>
-                  <select
-                    id="invite_role"
-                    className="form-select"
-                    value={inviteRole}
-                    onChange={(e) =>
-                      setInviteRole(e.target.value as MemberRole)
-                    }
-                  >
-                    {HUMAN_ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="col-auto">
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={minting}
-                  >
-                    {minting ? "Minting…" : "Mint copy-link"}
                   </button>
                 </div>
               </form>
