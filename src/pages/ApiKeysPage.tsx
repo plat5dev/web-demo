@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { Link } from "react-router-dom"
 import { api } from "../api/endpoints"
+import { mintKeyBody, scopesSummary } from "../api/scopes"
 import type { ApiKeyCreated, ApiKeyListed } from "../api/types"
 import { ApiError } from "../api/client"
 import { ErrorAlert } from "../components/ErrorAlert"
@@ -18,6 +19,7 @@ export function ApiKeysPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [keys, setKeys] = useState<ApiKeyListed[]>([])
   const [name, setName] = useState("")
+  const [scopesRaw, setScopesRaw] = useState("")
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<unknown>(null)
@@ -71,8 +73,12 @@ export function ApiKeysPage() {
     setCreated(null)
     try {
       if (!userId) throw new Error("missing user id")
-      const key = await api.createApiKey(userId, { name: name.trim() })
+      const key = await api.createApiKey(
+        userId,
+        mintKeyBody(name.trim(), scopesRaw),
+      )
       setName("")
+      setScopesRaw("")
       setCreated(key)
       setTryKey(key.key)
       await load(userId)
@@ -109,6 +115,7 @@ export function ApiKeysPage() {
           `HTTP ${err.status} ${err.code}`,
           err.message,
           err.requestId ? `request_id=${err.requestId}` : null,
+          err.body ? JSON.stringify(err.body, null, 2) : null,
         ]
           .filter(Boolean)
           .join("\n")
@@ -228,6 +235,7 @@ export function ApiKeysPage() {
           <div className="small mt-1 text-muted">
             prefix <code>{created.key_prefix}</code> · id{" "}
             <code className="font-monospace">{created.id}</code>
+            {" · scopes "}{scopesSummary(created.scopes)}
           </div>
         </div>
       )}
@@ -254,6 +262,9 @@ export function ApiKeysPage() {
                   </div>
                   <div className="small font-monospace text-muted">
                     {k.key_prefix}… · {k.id}
+                  </div>
+                  <div className="small text-muted">
+                    scopes {scopesSummary(k.scopes)}
                   </div>
                   <div className="small text-muted">
                     created {k.created_at}
@@ -291,6 +302,24 @@ export function ApiKeysPage() {
                     placeholder="ci-bot"
                   />
                 </div>
+                <div className="mb-3">
+                  <label className="form-label" htmlFor="key_scopes">
+                    Scopes (optional)
+                  </label>
+                  <input
+                    id="key_scopes"
+                    className="form-control font-monospace"
+                    value={scopesRaw}
+                    onChange={(e) => setScopesRaw(e.target.value)}
+                    placeholder="leave blank for unrestricted"
+                  />
+                  <div className="form-text">
+                    Comma or space separated labels your app owns. Leave blank
+                    to omit <code>scopes</code> (unrestricted key). Insufficient
+                    scope on probe is gateway 403 — the error envelope is shown
+                    below.
+                  </div>
+                </div>
                 <button
                   type="submit"
                   className="btn btn-primary"
@@ -308,7 +337,8 @@ export function ApiKeysPage() {
           <p className="small text-muted">
             Calls the gateway with only <code>X-API-Key</code> (no session
             JWT). User keys work on user + org (via member resolve). Member
-            keys work on <strong>org scope only</strong>.
+            keys work on <strong>org scope only</strong>. Insufficient key
+            scope → gateway <strong>403</strong> with the Plat5 error envelope.
           </p>
           <form className="card card-body" onSubmit={(e) => void onTry(e)}>
             <div className="mb-3">
