@@ -18,6 +18,7 @@ export function ErrorAlert({
   let title = "Error"
   let message = "Something went wrong"
   let meta: string | null = null
+  let envelope: string | null = null
 
   if (error instanceof ApiError) {
     title = error.code
@@ -29,7 +30,8 @@ export function ErrorAlert({
       error.requestId ? `request_id=${error.requestId}` : null,
     ]
       .filter(Boolean)
-      .join(" · ")
+      .join(" \u00b7 ")
+    if (error.body) envelope = JSON.stringify(error.body, null, 2)
   } else if (error instanceof Error) {
     message = error.message
   } else {
@@ -42,6 +44,14 @@ export function ErrorAlert({
       {message}
       {meta && (
         <div className="small text-danger-emphasis mt-1 font-monospace">{meta}</div>
+      )}
+      {envelope && (
+        <pre
+          className="small mt-2 mb-0 p-2 bg-body-secondary rounded font-monospace overflow-auto"
+          style={{ maxHeight: "12rem" }}
+        >
+          {envelope}
+        </pre>
       )}
       {onDismiss && (
         <button
