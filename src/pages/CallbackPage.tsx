@@ -1,19 +1,39 @@
 import { useEffect, useState } from "react"
-import { completeLogin } from "../auth/session"
+import { api } from "../api/endpoints"
+import {
+  clearStashedInvite,
+  completeLogin,
+  peekStashedInvite,
+} from "../auth/session"
 import { ErrorAlert } from "../components/ErrorAlert"
+
+/** Survives React Strict Mode double-mount; one redeem per callback. */
+let callbackStarted = false
 
 export function CallbackPage() {
   const [error, setError] = useState<unknown>(null)
 
   useEffect(() => {
-    // completeLogin is deduped — safe under React Strict Mode double-invoke
-    void completeLogin(window.location.search)
-      .then((returnTo) => {
+    if (callbackStarted) return
+    callbackStarted = true
+    void (async () => {
+      try {
+        const returnTo = await completeLogin(window.location.search)
+        const token = peekStashedInvite()
+        if (token) {
+          try {
+            await api.redeemInvite(token)
+          } finally {
+            clearStashedInvite()
+          }
+          window.location.replace("/orgs")
+          return
+        }
         window.location.replace(returnTo || "/")
-      })
-      .catch((e: unknown) => {
+      } catch (e: unknown) {
         setError(e)
-      })
+      }
+    })()
   }, [])
 
   if (error) {
@@ -22,9 +42,14 @@ export function CallbackPage() {
         <div className="col-md-8">
           <h1 className="h4 mb-3">Sign-in failed</h1>
           <ErrorAlert error={error} />
-          <a className="btn btn-outline-secondary" href="/login">
-            Try again
-          </a>
+          <div className="d-flex flex-wrap gap-2">
+            <a className="btn btn-outline-secondary" href="/login">
+              Try again
+            </a>
+            <a className="btn btn-outline-primary" href="/orgs">
+              Organizations
+            </a>
+          </div>
         </div>
       </div>
     )

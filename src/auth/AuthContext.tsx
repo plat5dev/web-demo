@@ -18,7 +18,7 @@ import {
 type AuthState = {
   ready: boolean
   authenticated: boolean
-  login: (returnTo?: string, invite?: string) => Promise<void>
+  login: (returnTo?: string) => Promise<void>
   logout: () => void
   getToken: () => Promise<string | null>
 }
@@ -35,8 +35,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setReady(true)
   }, [])
 
-  const login = useCallback(async (returnTo = "/", invite?: string) => {
-    await beginLogin(returnTo, invite)
+  const login = useCallback(async (returnTo = "/") => {
+    await beginLogin(returnTo)
   }, [])
 
   const logout = useCallback(() => {

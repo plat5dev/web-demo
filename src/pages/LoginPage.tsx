@@ -1,7 +1,7 @@
 import { useEffect } from "react"
 import { Navigate, useLocation, useSearchParams } from "react-router-dom"
 import { useAuth } from "../auth/AuthContext"
-import { INVITE_QUERY } from "../auth/session"
+import { INVITE_QUERY, stashInvite } from "../auth/session"
 
 /** Survives React Strict Mode double-mount; one authorize redirect per invite. */
 let inviteLoginStarted: string | null = null
@@ -17,9 +17,10 @@ export function LoginPage() {
 
   useEffect(() => {
     if (!invite) return
+    stashInvite(invite)
     if (inviteLoginStarted === invite) return
     inviteLoginStarted = invite
-    void login(returnTo, invite)
+    void login(returnTo)
   }, [invite, login, returnTo])
 
   if (authenticated && !invite) {
@@ -34,9 +35,10 @@ export function LoginPage() {
             <h1 className="h4 mb-3">{invite ? "Join organization" : "Sign in"}</h1>
             {invite ? (
               <p className="text-muted">
-                One-shot invite. Continue to Auth to sign up or log in; you
-                land as an active member (no pending row). This starts PKCE
-                in this browser and passes <code>invite</code> on authorize.
+                One-shot invite. This tab stashes the token, then starts PKCE.
+                Auth is a plain IdP — <code>invite=</code> is not sent to{" "}
+                <code>/authorize</code>. After sign-in the app redeems with
+                identity and you land on organizations as an active member.
               </p>
             ) : (
               <p className="text-muted">
@@ -47,7 +49,10 @@ export function LoginPage() {
             <button
               type="button"
               className="btn btn-primary w-100"
-              onClick={() => void login(returnTo, invite || undefined)}
+              onClick={() => {
+                if (invite) stashInvite(invite)
+                void login(returnTo)
+              }}
             >
               Continue to Auth
             </button>

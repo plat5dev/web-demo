@@ -124,6 +124,13 @@ export const api = {
       method: "DELETE",
     }),
 
+  /** User-scope redeem. Body is `{ token }` only; caller is the session JWT. */
+  redeemInvite: (token: string) =>
+    apiFetch<Member>("/api/invites/redeem", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+
   listProjects: async (orgId: string) => {
     const data = await apiFetch<{ projects: Project[] }>(
       `${orgBase(orgId)}/projects`,

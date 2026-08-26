@@ -3,8 +3,9 @@ import { randomString, sha256Challenge } from "./pkce"
 
 const STORAGE_KEY = "plat5.web-demo.tokens"
 const PKCE_KEY = "plat5.web-demo.pkce"
+const INVITE_KEY = "plat5.web-demo.invite"
 
-/** Auth `/authorize` query param; also the web-demo login query (`/login?invite=`). */
+/** Web-demo login query (`/login?invite=`). Not forwarded to Auth `/authorize`. */
 export const INVITE_QUERY = "invite"
 
 export type TokenSet = {
@@ -48,8 +49,8 @@ export function getStoredTokens(): TokenSet | null {
 
 /**
  * Copy-link URL for an org invite token.
- * Must be a web-demo origin path — Auth `/authorize` cannot be shared because
- * `code_challenge` is generated per browser in `beginLogin`.
+ * Origin path so this tab can stash the token, then start its own PKCE.
+ * Auth `/authorize` must not receive `invite=`.
  */
 export function inviteAppUrl(
   token: string,
@@ -60,10 +61,25 @@ export function inviteAppUrl(
   return url.toString()
 }
 
-export async function beginLogin(
-  returnTo = "/",
-  invite?: string,
-): Promise<void> {
+export function stashInvite(token: string): void {
+  const trimmed = token.trim()
+  if (!trimmed) {
+    sessionStorage.removeItem(INVITE_KEY)
+    return
+  }
+  sessionStorage.setItem(INVITE_KEY, trimmed)
+}
+
+export function peekStashedInvite(): string | null {
+  const trimmed = sessionStorage.getItem(INVITE_KEY)?.trim() || ""
+  return trimmed || null
+}
+
+export function clearStashedInvite(): void {
+  sessionStorage.removeItem(INVITE_KEY)
+}
+
+export async function beginLogin(returnTo = "/"): Promise<void> {
   const state = randomString(16)
   const verifier = randomString(32)
   const challenge = await sha256Challenge(verifier)
@@ -80,10 +96,6 @@ export async function beginLogin(
   url.searchParams.set("provider", "password")
   if (config.authAudience) {
     url.searchParams.set("audience", config.authAudience)
-  }
-  const trimmedInvite = invite?.trim()
-  if (trimmedInvite) {
-    url.searchParams.set(INVITE_QUERY, trimmedInvite)
   }
 
   window.location.assign(url.toString())
