@@ -30,7 +30,7 @@ export function ErrorAlert({
       error.requestId ? `request_id=${error.requestId}` : null,
     ]
       .filter(Boolean)
-      .join(" \u00b7 ")
+      .join(" · ")
     if (error.body) envelope = JSON.stringify(error.body, null, 2)
   } else if (error instanceof Error) {
     message = error.message

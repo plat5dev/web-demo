@@ -81,10 +81,10 @@ export function MemberKeysPanel({
   return (
     <div className="border rounded p-3 bg-body-tertiary">
       <div className="fw-semibold small mb-2">
-        Member keys \u00b7 <span className="text-muted">{label}</span>
+        Member keys · <span className="text-muted">{label}</span>
       </div>
       <p className="small text-muted mb-2">
-        Prefix <code>{memberKeyPrefix}</code> \u00b7 org scope only (
+        Prefix <code>{memberKeyPrefix}</code> · org scope only (
         <code>X-API-Key</code>).
       </p>
 
@@ -92,7 +92,7 @@ export function MemberKeysPanel({
 
       {created && (
         <div className="alert alert-warning py-2 small">
-          <div className="fw-semibold mb-1">Copy now \u2014 shown once</div>
+          <div className="fw-semibold mb-1">Copy now — shown once</div>
           <code className="user-select-all d-block text-break">
             {created.key}
           </code>
@@ -102,7 +102,7 @@ export function MemberKeysPanel({
         </div>
       )}
 
-      {loading && <div className="text-muted small">Loading keys\u2026</div>}
+      {loading && <div className="text-muted small">Loading keys…</div>}
       <div className="list-group list-group-flush mb-2">
         {!loading && keys.length === 0 && (
           <div className="list-group-item px-0 text-muted small">
@@ -122,7 +122,7 @@ export function MemberKeysPanel({
                 )}
               </div>
               <div className="small font-monospace text-muted">
-                {k.key_prefix}\u2026 \u00b7 {k.id}
+                {k.key_prefix}… · {k.id}
               </div>
               <div className="small text-muted">
                 scopes {scopesSummary(k.scopes)}
@@ -180,7 +180,7 @@ export function MemberKeysPanel({
           className="btn btn-sm btn-primary"
           disabled={creating || !name.trim()}
         >
-          {creating ? "\u2026" : "Create"}
+          {creating ? "…" : "Create"}
         </button>
       </form>
     </div>
