@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { api } from "../api/endpoints"
+import { mintKeyBody, scopesSummary } from "../api/scopes"
 import type { ApiKeyCreated, ApiKeyListed } from "../api/types"
 import { ErrorAlert } from "./ErrorAlert"
 import { memberKeyPrefix } from "../config"
@@ -19,6 +20,7 @@ export function MemberKeysPanel({
 }: Props) {
   const [keys, setKeys] = useState<ApiKeyListed[]>([])
   const [name, setName] = useState("")
+  const [scopesRaw, setScopesRaw] = useState("")
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<unknown>(null)
@@ -47,10 +49,13 @@ export function MemberKeysPanel({
     setError(null)
     setCreated(null)
     try {
-      const key = await api.createMemberApiKey(orgId, memberId, {
-        name: name.trim(),
-      })
+      const key = await api.createMemberApiKey(
+        orgId,
+        memberId,
+        mintKeyBody(name.trim(), scopesRaw),
+      )
       setName("")
+      setScopesRaw("")
       setCreated(key)
       onCreatedKey?.(key.key)
       await load()
@@ -91,6 +96,9 @@ export function MemberKeysPanel({
           <code className="user-select-all d-block text-break">
             {created.key}
           </code>
+          <div className="small mt-1 text-muted">
+            scopes {scopesSummary(created.scopes)}
+          </div>
         </div>
       )}
 
@@ -116,6 +124,9 @@ export function MemberKeysPanel({
               <div className="small font-monospace text-muted">
                 {k.key_prefix}… · {k.id}
               </div>
+              <div className="small text-muted">
+                scopes {scopesSummary(k.scopes)}
+              </div>
             </div>
             {!k.revoked_at && (
               <button
@@ -130,8 +141,8 @@ export function MemberKeysPanel({
         ))}
       </div>
 
-      <form className="row g-2 align-items-end" onSubmit={(e) => void onCreate(e)}>
-        <div className="col">
+      <form onSubmit={(e) => void onCreate(e)}>
+        <div className="mb-2">
           <label className="form-label small mb-1" htmlFor={`mk_${memberId}`}>
             Name
           </label>
@@ -145,15 +156,32 @@ export function MemberKeysPanel({
             placeholder="deploy-ci"
           />
         </div>
-        <div className="col-auto">
-          <button
-            type="submit"
-            className="btn btn-sm btn-primary"
-            disabled={creating || !name.trim()}
+        <div className="mb-2">
+          <label
+            className="form-label small mb-1"
+            htmlFor={`mk_scopes_${memberId}`}
           >
-            {creating ? "…" : "Create"}
-          </button>
+            Scopes (optional)
+          </label>
+          <input
+            id={`mk_scopes_${memberId}`}
+            className="form-control form-control-sm font-monospace"
+            value={scopesRaw}
+            onChange={(e) => setScopesRaw(e.target.value)}
+            placeholder="leave blank for unrestricted"
+          />
+          <div className="form-text">
+            Comma or space separated labels your app owns. Omit for an
+            unrestricted key.
+          </div>
         </div>
+        <button
+          type="submit"
+          className="btn btn-sm btn-primary"
+          disabled={creating || !name.trim()}
+        >
+          {creating ? "…" : "Create"}
+        </button>
       </form>
     </div>
   )
