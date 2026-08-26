@@ -93,3 +93,21 @@ export type ApiKeyListed = {
 export type ApiKeyCreated = ApiKeyListed & {
   key: string
 }
+
+/** Mint response — token is returned once, like an API key. */
+export type InviteCreated = {
+  id: string
+  token: string
+  expires_at: string
+  role: MemberRole
+}
+
+/** List/revoke echo; never includes token. */
+export type InviteListed = {
+  id: string
+  role: MemberRole
+  expires_at: string
+  created_at?: string
+  revoked_at?: string | null
+  redeemed_at?: string | null
+}
