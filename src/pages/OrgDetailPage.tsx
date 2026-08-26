@@ -10,6 +10,7 @@ import type {
   ServiceAccount,
 } from "../api/types"
 import { ErrorAlert } from "../components/ErrorAlert"
+import { InvitePanel } from "../components/InvitePanel"
 import { MemberKeysPanel } from "../components/MemberKeysPanel"
 import { useOrg } from "../org/OrgContext"
 import { memberKeyPrefix } from "../config"
@@ -611,6 +612,8 @@ export function OrgDetailPage() {
               to mint <code>{memberKeyPrefix}</code> keys for org-scope automation.
             </p>
           )}
+
+          <InvitePanel orgId={org.id} onError={setError} />
 
           <div className="card mb-4">
             <div className="card-header">Add user member</div>

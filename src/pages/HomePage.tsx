@@ -66,6 +66,14 @@ export function HomePage() {
               admission probe shows non-member <code>404</code>
             </li>
             <li className="list-group-item">
+              <strong>Copy invite link</strong> →{" "}
+              <code>/login?invite=token</code>; already signed in redeems
+              immediately. Else this origin stashes (cookie +{" "}
+              <code>state</code>-keyed), strips the query, PKCE with no{" "}
+              <code>invite=</code> on authorize, then{" "}
+              <code>POST /api/invites/redeem</code>. One-shot, no SMTP.
+            </li>
+            <li className="list-group-item">
               <strong>Projects / tasks</strong> → template business API
               (org scope)
             </li>

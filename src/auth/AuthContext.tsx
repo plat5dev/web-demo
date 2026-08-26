@@ -63,4 +63,3 @@ export function useAuth(): AuthState {
   if (!ctx) throw new Error("useAuth outside AuthProvider")
   return ctx
 }
-
