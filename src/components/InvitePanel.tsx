@@ -6,7 +6,7 @@ import { inviteAppUrl } from "../auth/session"
 const HUMAN_ROLES: MemberRole[] = ["member", "admin", "owner"]
 
 const INVITE_TTL_OPTIONS: { label: string; value: string }[] = [
-  { label: "Default", value: "" },
+  { label: "Default (7 days)", value: "" },
   { label: "1 hour", value: "3600" },
   { label: "1 day", value: "86400" },
   { label: "7 days", value: "604800" },
@@ -46,10 +46,21 @@ export function InvitePanel({
     return () => window.clearTimeout(t)
   }, [copied])
 
+  async function copyText(which: "link" | "token", token: string) {
+    const text = which === "link" ? inviteAppUrl(token) : token
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(which)
+    } catch {
+      setCopied(null)
+    }
+  }
+
   async function onCreateInvite(e: FormEvent) {
     e.preventDefault()
     setCreatingInvite(true)
     setCreatedInvite(null)
+    setCopied(null)
     try {
       const body: { role: MemberRole; expires_in_seconds?: number } = {
         role: inviteRole,
@@ -57,6 +68,7 @@ export function InvitePanel({
       if (inviteTtl) body.expires_in_seconds = Number(inviteTtl)
       const created = await api.createInvite(orgId, body)
       setCreatedInvite(created)
+      await copyText("link", created.token)
       await loadInvites()
     } catch (err) {
       onError(err)
@@ -76,20 +88,6 @@ export function InvitePanel({
     }
   }
 
-  async function copyInvite(which: "link" | "token") {
-    if (!createdInvite) return
-    const text =
-      which === "link"
-        ? inviteAppUrl(createdInvite.token)
-        : createdInvite.token
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(which)
-    } catch {
-      setCopied(null)
-    }
-  }
-
   const createdLink = createdInvite
     ? inviteAppUrl(createdInvite.token)
     : null
@@ -99,11 +97,13 @@ export function InvitePanel({
       <div className="card-header">Copy invite link</div>
       <div className="card-body">
         <p className="small text-muted">
-          Mint a one-shot token (like an API key). Invitee opens the demo
-          URL, this browser starts PKCE, and Auth authorize gets{" "}
-          <code>invite=&lt;token&gt;</code>. They sign up or log in and land
-          as an <strong>active</strong> member — no SMTP, no pending row.
-          Add-by-user_id below still works.
+          Mint a one-shot token (like an API key). Clipboard gets{" "}
+          <code>{"${origin}/login?invite="}</code>
+          {createdInvite ? "" : "{token}"}. The invitee’s browser starts PKCE
+          and forwards <code>invite=</code> onto Auth <code>/authorize</code>
+          — not an Auth issuer URL. They land as an <strong>active</strong>{" "}
+          member. No SMTP, no pending row. Add-by-user_id below still works.
+          Expires in 7 days if omitted.
         </p>
         {createdInvite && createdLink && (
           <div className="alert alert-warning">
@@ -111,20 +111,26 @@ export function InvitePanel({
               Copy now — token will not be shown again
             </div>
             <code className="user-select-all d-block text-break mb-2">
-              {createdLink}
+              {createdInvite.token}
             </code>
+            <div className="small mb-2">
+              Link{" "}
+              <code className="user-select-all d-block text-break">
+                {createdLink}
+              </code>
+            </div>
             <div className="d-flex flex-wrap gap-2 mb-2">
               <button
                 type="button"
                 className="btn btn-sm btn-primary"
-                onClick={() => void copyInvite("link")}
+                onClick={() => void copyText("link", createdInvite.token)}
               >
                 {copied === "link" ? "Copied link" : "Copy link"}
               </button>
               <button
                 type="button"
                 className="btn btn-sm btn-outline-secondary"
-                onClick={() => void copyInvite("token")}
+                onClick={() => void copyText("token", createdInvite.token)}
               >
                 {copied === "token" ? "Copied token" : "Copy token"}
               </button>
@@ -211,7 +217,7 @@ export function InvitePanel({
               className="btn btn-primary w-100"
               disabled={creatingInvite}
             >
-              {creatingInvite ? "…" : "Create link"}
+              {creatingInvite ? "…" : "Mint copy-link"}
             </button>
           </div>
         </form>
