@@ -98,12 +98,11 @@ export function InvitePanel({
       <div className="card-body">
         <p className="small text-muted">
           Mint a one-shot token (like an API key). Clipboard gets{" "}
-          <code>{"${origin}/login?invite="}</code>
-          {createdInvite ? "" : "{token}"}. The invitee’s browser starts PKCE
-          and forwards <code>invite=</code> onto Auth <code>/authorize</code>
-          — not an Auth issuer URL. They land as an <strong>active</strong>{" "}
-          member. No SMTP, no pending row. Add-by-user_id below still works.
-          Expires in 7 days if omitted.
+          <code>/login?invite=</code> on this app origin. The invitee’s
+          browser starts PKCE and forwards <code>invite=</code> onto Auth{" "}
+          <code>/authorize</code> — not an Auth issuer URL. They land as an{" "}
+          <strong>active</strong> member. No SMTP, no pending row.
+          Add-by-user_id below still works. Expires in 7 days if omitted.
         </p>
         {createdInvite && createdLink && (
           <div className="alert alert-warning">
