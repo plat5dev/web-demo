@@ -2,6 +2,8 @@ import { apiFetch, type FetchAuth } from "./client"
 import type {
   ApiKeyCreated,
   ApiKeyListed,
+  InviteCreated,
+  InviteListed,
   Member,
   MemberRole,
   MemberStatus,
@@ -27,6 +29,10 @@ function memberKeysBase(orgId: string, memberId: string): string {
 
 function saBase(orgId: string): string {
   return `${orgBase(orgId)}/service-accounts`
+}
+
+function invitesBase(orgId: string): string {
+  return `${orgBase(orgId)}/invites`
 }
 
 export const api = {
@@ -94,6 +100,27 @@ export const api = {
 
   deleteMember: (orgId: string, memberId: string) =>
     apiFetch<void>(`${orgBase(orgId)}/members/${memberId}`, {
+      method: "DELETE",
+    }),
+
+  listInvites: async (orgId: string) => {
+    const data = await apiFetch<{ invites: InviteListed[] }>(
+      invitesBase(orgId),
+    )
+    return data.invites ?? []
+  },
+
+  createInvite: (
+    orgId: string,
+    body?: { role?: MemberRole; expires_in_seconds?: number },
+  ) =>
+    apiFetch<InviteCreated>(invitesBase(orgId), {
+      method: "POST",
+      body: JSON.stringify(body ?? {}),
+    }),
+
+  revokeInvite: (orgId: string, inviteId: string) =>
+    apiFetch<void>(`${invitesBase(orgId)}/${inviteId}`, {
       method: "DELETE",
     }),
 

@@ -1,6 +1,6 @@
 # Plat5 web demo
 
-Sample **SPA** that talks to Plat5 through the **gateway** and signs in with **Plat5 Auth** (browser OAuth/PKCE redirect). Not a template or product — dogfood UI for profiles, user/member API keys, orgs/members/service accounts, projects, and tasks.
+Sample **SPA** that talks to Plat5 through the **gateway** and signs in with **Plat5 Auth** (browser OAuth/PKCE redirect). Not a template or product — dogfood UI for profiles, user/member API keys, orgs/members/service accounts, copy-invite-link, projects, and tasks.
 
 Stack: Vite · React · TypeScript · Bootstrap 5.
 
@@ -28,7 +28,9 @@ bun install
 bun run dev            # http://localhost:5173
 ```
 
-Sign in → Auth password UI (dev codes in Auth issuer logs when SMTP unset) → profile / user API keys / orgs (members, service accounts, member keys, admission probe) / projects / tasks.
+Sign in → Auth password UI (dev codes in Auth issuer logs when SMTP unset) → profile / user API keys / orgs (members, copy-invite-link, service accounts, member keys, admission probe) / projects / tasks.
+
+Invite copy-link is `{origin}/login?invite={token}`. Opening it starts this browser’s PKCE flow and adds `invite=<token>` to Auth `/authorize` (a shared authorize URL cannot carry a per-browser `code_challenge`). Add-by-`user_id` still works. No SMTP.
 
 ## Env
 

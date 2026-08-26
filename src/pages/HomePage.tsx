@@ -66,6 +66,11 @@ export function HomePage() {
               admission probe shows non-member <code>404</code>
             </li>
             <li className="list-group-item">
+              <strong>Copy invite link</strong> →{" "}
+              <code>/login?invite=token</code>; this browser starts PKCE and
+              adds <code>invite</code> to authorize. One-shot, no SMTP.
+            </li>
+            <li className="list-group-item">
               <strong>Projects / tasks</strong> → template business API
               (org scope)
             </li>
