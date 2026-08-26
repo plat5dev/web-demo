@@ -103,10 +103,10 @@ export function InvitePanel({
           the token (first-party cookie + OAuth <code>state</code>-keyed stash),
           strips the query, and starts PKCE — no <code>invite=</code> on{" "}
           <code>/authorize</code>, token never in OAuth <code>state</code>. Then{" "}
-          <code>POST /api/invites/redeem</code> with <code>{"{"}"token"{"}""}</code>
-          {" "}and the session JWT. They land as an <strong>active</strong>{" "}
-          member. Email is unbound. No SMTP, no pending row. Add-by-user_id
-          below still works. Expires in 7 days if omitted.
+          <code>POST /api/invites/redeem</code> with <code>{"{ token }"}</code>{" "}
+          and the session JWT. They land as an <strong>active</strong> member.
+          Email is unbound. No SMTP, no pending row. Add-by-user_id below still
+          works. Expires in 7 days if omitted.
         </p>
         {createdInvite && createdLink && (
           <div className="alert alert-warning">

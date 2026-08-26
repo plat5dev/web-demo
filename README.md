@@ -30,7 +30,7 @@ bun run dev            # http://localhost:5173
 
 Sign in → Auth password UI (dev codes in Auth issuer logs when SMTP unset) → profile / user API keys / orgs (members, copy-invite-link, service accounts, member keys, admission probe) / projects / tasks.
 
-Invite copy-link is `{origin}/login?invite={token}`. Opening it stashes the token on this origin, starts this browser’s PKCE flow (Auth `/authorize` does **not** get `invite=`), then `POST /api/invites/redeem` with the logged-in user. Add-by-`user_id` still works. No SMTP.
+Invite copy-link is `{origin}/login?invite={token}`. Already signed in: redeem immediately (skip PKCE). Else the app stashes the token in a first-party cookie (`plat5_web_demo_invite`, not Auth’s `plat5_invite_token`) plus an origin stash keyed by OAuth CSRF `state`, strips the query so Referer to Auth cannot leak it, starts PKCE (Auth `/authorize` does **not** get `invite=`; token never in OAuth `state`), then `POST /api/invites/redeem` with `{ "token" }` and the session JWT. Cookie/stash clear only after a successful redeem. Add-by-`user_id` still works. Email is unbound. No SMTP.
 
 ## Env
 
