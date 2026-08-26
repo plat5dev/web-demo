@@ -4,6 +4,9 @@ import { randomString, sha256Challenge } from "./pkce"
 const STORAGE_KEY = "plat5.web-demo.tokens"
 const PKCE_KEY = "plat5.web-demo.pkce"
 
+/** Auth `/authorize` query param; also the web-demo login query (`/login?invite=`). */
+export const INVITE_QUERY = "invite"
+
 export type TokenSet = {
   access_token: string
   refresh_token?: string
@@ -43,7 +46,24 @@ export function getStoredTokens(): TokenSet | null {
   return loadTokens()
 }
 
-export async function beginLogin(returnTo = "/"): Promise<void> {
+/**
+ * Copy-link URL for an org invite token.
+ * Must be a web-demo origin path — Auth `/authorize` cannot be shared because
+ * `code_challenge` is generated per browser in `beginLogin`.
+ */
+export function inviteAppUrl(
+  token: string,
+  origin = window.location.origin,
+): string {
+  const url = new URL("/login", origin)
+  url.searchParams.set(INVITE_QUERY, token)
+  return url.toString()
+}
+
+export async function beginLogin(
+  returnTo = "/",
+  invite?: string,
+): Promise<void> {
   const state = randomString(16)
   const verifier = randomString(32)
   const challenge = await sha256Challenge(verifier)
@@ -60,6 +80,10 @@ export async function beginLogin(returnTo = "/"): Promise<void> {
   url.searchParams.set("provider", "password")
   if (config.authAudience) {
     url.searchParams.set("audience", config.authAudience)
+  }
+  const trimmedInvite = invite?.trim()
+  if (trimmedInvite) {
+    url.searchParams.set(INVITE_QUERY, trimmedInvite)
   }
 
   window.location.assign(url.toString())
