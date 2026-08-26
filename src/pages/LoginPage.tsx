@@ -1,30 +1,76 @@
-import { useEffect } from "react"
-import { Navigate, useLocation, useSearchParams } from "react-router-dom"
+import { useEffect, useState } from "react"
+import { Navigate, useLocation } from "react-router-dom"
+import { api } from "../api/endpoints"
 import { useAuth } from "../auth/AuthContext"
-import { INVITE_QUERY, stashInvite } from "../auth/session"
+import {
+  captureInviteQuery,
+  clearStashedInvite,
+  peekStashedInvite,
+} from "../auth/session"
+import { ErrorAlert } from "../components/ErrorAlert"
 
-/** Survives React Strict Mode double-mount; one authorize redirect per invite. */
+/** Survives React Strict Mode double-mount; one authorize or redeem per invite. */
 let inviteLoginStarted: string | null = null
+let inviteRedeemStarted: string | null = null
 
 export function LoginPage() {
-  const { authenticated, login } = useAuth()
+  const { ready, authenticated, login } = useAuth()
   const location = useLocation()
-  const [params] = useSearchParams()
-  const invite = params.get(INVITE_QUERY)?.trim() || ""
   const from =
     (location.state as { from?: string } | null)?.from || "/profile"
-  const returnTo = invite ? "/orgs" : from
+  const [error, setError] = useState<unknown>(null)
+  const [joining, setJoining] = useState(false)
+  const [pendingInvite, setPendingInvite] = useState(
+    () => Boolean(peekStashedInvite()),
+  )
 
   useEffect(() => {
-    if (!invite) return
-    stashInvite(invite)
-    if (inviteLoginStarted === invite) return
-    inviteLoginStarted = invite
-    void login(returnTo)
-  }, [invite, login, returnTo])
+    if (!ready) return
 
-  if (authenticated && !invite) {
+    const token = captureInviteQuery()
+    if (token) setPendingInvite(true)
+    if (!token) return
+
+    if (authenticated) {
+      if (inviteRedeemStarted === token) return
+      inviteRedeemStarted = token
+      setJoining(true)
+      void (async () => {
+        try {
+          await api.redeemInvite(token)
+          clearStashedInvite()
+          window.location.replace("/orgs")
+        } catch (e: unknown) {
+          inviteRedeemStarted = null
+          setJoining(false)
+          setError(e)
+        }
+      })()
+      return
+    }
+
+    if (inviteLoginStarted === token) return
+    inviteLoginStarted = token
+    void login("/orgs").catch((e: unknown) => {
+      inviteLoginStarted = null
+      setError(e)
+    })
+  }, [ready, authenticated, login])
+
+  if (!ready) {
+    return (
+      <div className="text-center py-5 text-muted">Loading session…</div>
+    )
+  }
+
+  if (authenticated && !pendingInvite && !joining) {
     return <Navigate to={from} replace />
+  }
+
+  if (joining) {
+    return (
+      <div className="text-center py-5 text-muted">Joining organization…</div>
+    )
   }
 
   return (
@@ -32,13 +78,18 @@ export function LoginPage() {
       <div className="col-md-6 col-lg-5">
         <div className="card shadow-sm">
           <div className="card-body p-4">
-            <h1 className="h4 mb-3">{invite ? "Join organization" : "Sign in"}</h1>
-            {invite ? (
+            <h1 className="h4 mb-3">
+              {pendingInvite ? "Join organization" : "Sign in"}
+            </h1>
+            <ErrorAlert error={error} onDismiss={() => setError(null)} />
+            {pendingInvite ? (
               <p className="text-muted">
-                One-shot invite. This tab stashes the token, then starts PKCE.
-                Auth is a plain IdP — <code>invite=</code> is not sent to{" "}
-                <code>/authorize</code>. After sign-in the app redeems with
-                identity and you land on organizations as an active member.
+                One-shot invite. If you are already signed in, this page redeems
+                immediately (no PKCE). Otherwise the token is stashed in a
+                first-party cookie and keyed by OAuth <code>state</code> on this
+                origin — <code>invite=</code> is stripped so Referer cannot leak
+                it, and is not sent to <code>/authorize</code>. After sign-in the
+                app <code>POST /api/invites/redeem</code>s with the session JWT.
               </p>
             ) : (
               <p className="text-muted">
@@ -50,11 +101,28 @@ export function LoginPage() {
               type="button"
               className="btn btn-primary w-100"
               onClick={() => {
-                if (invite) stashInvite(invite)
-                void login(returnTo)
+                if (pendingInvite && authenticated) {
+                  const token = peekStashedInvite()
+                  if (!token) return
+                  setJoining(true)
+                  void (async () => {
+                    try {
+                      await api.redeemInvite(token)
+                      clearStashedInvite()
+                      window.location.replace("/orgs")
+                    } catch (e: unknown) {
+                      setJoining(false)
+                      setError(e)
+                    }
+                  })()
+                  return
+                }
+                void login(pendingInvite ? "/orgs" : from)
               }}
             >
-              Continue to Auth
+              {pendingInvite && authenticated
+                ? "Retry join"
+                : "Continue to Auth"}
             </button>
           </div>
         </div>

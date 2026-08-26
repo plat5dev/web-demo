@@ -98,12 +98,15 @@ export function InvitePanel({
       <div className="card-body">
         <p className="small text-muted">
           Mint a one-shot token (like an API key). Clipboard gets{" "}
-          <code>/login?invite=</code> on this app origin. The invitee’s
-          browser stashes the token, starts PKCE (Auth is a plain IdP — no{" "}
-          <code>invite=</code> on <code>/authorize</code>), then{" "}
-          <code>POST /api/invites/redeem</code>. They land as an{" "}
-          <strong>active</strong> member. No SMTP, no pending row.
-          Add-by-user_id below still works. Expires in 7 days if omitted.
+          <code>/login?invite=</code> on this app origin. Already signed in
+          → redeem immediately (skip PKCE). Else the invitee’s browser stashes
+          the token (first-party cookie + OAuth <code>state</code>-keyed stash),
+          strips the query, and starts PKCE — no <code>invite=</code> on{" "}
+          <code>/authorize</code>, token never in OAuth <code>state</code>. Then{" "}
+          <code>POST /api/invites/redeem</code> with <code>{"{"}"token"{"}""}</code>
+          {" "}and the session JWT. They land as an <strong>active</strong>{" "}
+          member. Email is unbound. No SMTP, no pending row. Add-by-user_id
+          below still works. Expires in 7 days if omitted.
         </p>
         {createdInvite && createdLink && (
           <div className="alert alert-warning">

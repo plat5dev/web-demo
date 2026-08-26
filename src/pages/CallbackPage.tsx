@@ -18,14 +18,18 @@ export function CallbackPage() {
     callbackStarted = true
     void (async () => {
       try {
+        const params = new URLSearchParams(window.location.search)
+        const oauthState = params.get("state")
+        const token = peekStashedInvite(oauthState)
         const returnTo = await completeLogin(window.location.search)
-        const token = peekStashedInvite()
         if (token) {
           try {
             await api.redeemInvite(token)
-          } finally {
-            clearStashedInvite()
+          } catch (e: unknown) {
+            // Keep cookie + by-state stash so the user can retry.
+            throw e
           }
+          clearStashedInvite(oauthState)
           window.location.replace("/orgs")
           return
         }

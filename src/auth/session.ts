@@ -3,10 +3,20 @@ import { randomString, sha256Challenge } from "./pkce"
 
 const STORAGE_KEY = "plat5.web-demo.tokens"
 const PKCE_KEY = "plat5.web-demo.pkce"
-const INVITE_KEY = "plat5.web-demo.invite"
+/** Origin sessionStorage map: OAuth CSRF `state` → invite token (Auth0 appState). */
+const INVITE_BY_STATE_KEY = "plat5.web-demo.invite.by-state"
 
 /** Web-demo login query (`/login?invite=`). Not forwarded to Auth `/authorize`. */
 export const INVITE_QUERY = "invite"
+
+/**
+ * First-party cookie for the pending invite token.
+ * Not `plat5_invite_token` (that was Auth's IdP cookie).
+ * Covers already-had-a-tab; the state-keyed stash covers PKCE / ITP.
+ */
+export const INVITE_COOKIE = "plat5_web_demo_invite"
+
+const INVITE_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
 export type TokenSet = {
   access_token: string
@@ -61,22 +71,117 @@ export function inviteAppUrl(
   return url.toString()
 }
 
+function setInviteCookie(token: string): void {
+  const parts = [
+    `${INVITE_COOKIE}=${encodeURIComponent(token)}`,
+    "Path=/",
+    "SameSite=Lax",
+    `Max-Age=${INVITE_COOKIE_MAX_AGE}`,
+  ]
+  if (window.location.protocol === "https:") parts.push("Secure")
+  document.cookie = parts.join("; ")
+}
+
+function peekInviteCookie(): string | null {
+  const prefix = `${INVITE_COOKIE}=`
+  for (const part of document.cookie.split("; ")) {
+    if (!part.startsWith(prefix)) continue
+    try {
+      const trimmed = decodeURIComponent(part.slice(prefix.length)).trim()
+      return trimmed || null
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+function clearInviteCookie(): void {
+  document.cookie = `${INVITE_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`
+}
+
+function loadInviteByState(): Record<string, string> {
+  try {
+    const raw = sessionStorage.getItem(INVITE_BY_STATE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {}
+    }
+    const out: Record<string, string> = {}
+    for (const [state, token] of Object.entries(
+      parsed as Record<string, unknown>,
+    )) {
+      if (typeof token === "string" && token.trim()) out[state] = token.trim()
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+function saveInviteByState(map: Record<string, string>): void {
+  if (Object.keys(map).length === 0) {
+    sessionStorage.removeItem(INVITE_BY_STATE_KEY)
+    return
+  }
+  sessionStorage.setItem(INVITE_BY_STATE_KEY, JSON.stringify(map))
+}
+
+function stashInviteByState(state: string, token: string): void {
+  const map = loadInviteByState()
+  map[state] = token
+  saveInviteByState(map)
+}
+
+function peekInviteByState(state: string): string | null {
+  return loadInviteByState()[state] ?? null
+}
+
+/** Cookie first, then (when `oauthState` is the CSRF nonce) the by-state stash. */
+export function peekStashedInvite(oauthState?: string | null): string | null {
+  if (oauthState) {
+    const byState = peekInviteByState(oauthState)
+    if (byState) return byState
+  }
+  return peekInviteCookie()
+}
+
 export function stashInvite(token: string): void {
   const trimmed = token.trim()
   if (!trimmed) {
-    sessionStorage.removeItem(INVITE_KEY)
+    clearInviteCookie()
     return
   }
-  sessionStorage.setItem(INVITE_KEY, trimmed)
+  setInviteCookie(trimmed)
 }
 
-export function peekStashedInvite(): string | null {
-  const trimmed = sessionStorage.getItem(INVITE_KEY)?.trim() || ""
-  return trimmed || null
+/**
+ * Read `?invite=`, persist the first-party cookie, and strip the query so a
+ * later Referer to Auth cannot leak the token.
+ */
+export function captureInviteQuery(): string | null {
+  const url = new URL(window.location.href)
+  const fromQuery = url.searchParams.get(INVITE_QUERY)?.trim() || ""
+  if (fromQuery) {
+    setInviteCookie(fromQuery)
+    url.searchParams.delete(INVITE_QUERY)
+    const stripped = `${url.pathname}${url.search}${url.hash}`
+    window.history.replaceState(window.history.state, "", stripped)
+  }
+  return fromQuery || peekInviteCookie()
 }
 
-export function clearStashedInvite(): void {
-  sessionStorage.removeItem(INVITE_KEY)
+/** Clear cookie + by-state stash. Only call after a successful redeem. */
+export function clearStashedInvite(oauthState?: string | null): void {
+  clearInviteCookie()
+  if (oauthState) {
+    const map = loadInviteByState()
+    delete map[oauthState]
+    saveInviteByState(map)
+    return
+  }
+  sessionStorage.removeItem(INVITE_BY_STATE_KEY)
 }
 
 export async function beginLogin(returnTo = "/"): Promise<void> {
@@ -85,6 +190,13 @@ export async function beginLogin(returnTo = "/"): Promise<void> {
   const challenge = await sha256Challenge(verifier)
   const pkce: PkceState = { state, verifier, returnTo }
   sessionStorage.setItem(PKCE_KEY, JSON.stringify(pkce))
+
+  // Auth0 appState: CSRF `state` stays a nonce. Key the invite by that state
+  // on this origin. Never put the token in OAuth `state` or on /authorize.
+  const invite = peekInviteCookie()
+  if (invite) {
+    stashInviteByState(state, invite)
+  }
 
   const url = new URL(`${config.authIssuer}/authorize`)
   url.searchParams.set("client_id", config.authClientId)
