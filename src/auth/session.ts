@@ -6,7 +6,7 @@ const PKCE_KEY = "plat5.web-demo.pkce"
 /** Origin sessionStorage map: OAuth CSRF `state` → invite token (Auth0 appState). */
 const INVITE_BY_STATE_KEY = "plat5.web-demo.invite.by-state"
 
-/** Web-demo login query (`/login?invite=`). Not forwarded to Auth `/authorize`. */
+/** Web-demo join query (`/invites?invite=`). Not forwarded to Auth `/authorize`. */
 export const INVITE_QUERY = "invite"
 
 /**
@@ -66,7 +66,7 @@ export function inviteAppUrl(
   token: string,
   origin = window.location.origin,
 ): string {
-  const url = new URL("/login", origin)
+  const url = new URL("/invites", origin)
   url.searchParams.set(INVITE_QUERY, token)
   return url.toString()
 }
