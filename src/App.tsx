@@ -6,6 +6,7 @@ import { OrgProvider } from "./org/OrgContext"
 import { ApiKeysPage } from "./pages/ApiKeysPage"
 import { CallbackPage } from "./pages/CallbackPage"
 import { HomePage } from "./pages/HomePage"
+import { InvitesPage } from "./pages/InvitesPage"
 import { LoginPage } from "./pages/LoginPage"
 import { OrgDetailPage } from "./pages/OrgDetailPage"
 import { OrgsPage } from "./pages/OrgsPage"
@@ -22,6 +23,7 @@ export default function App() {
             <Route element={<Layout />}>
               <Route index element={<HomePage />} />
               <Route path="login" element={<LoginPage />} />
+              <Route path="invites" element={<InvitesPage />} />
               <Route path="callback" element={<CallbackPage />} />
               <Route
                 path="profile"
