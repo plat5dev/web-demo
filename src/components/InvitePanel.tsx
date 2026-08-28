@@ -124,8 +124,7 @@ export function InvitePanel({
           )}
           {invites.map((inv) => {
             const token = rowToken(inv)
-            const status = inv.status ?? (inv.redeemed_at ? "redeemed" : inv.revoked_at ? "revoked" : "active")
-            const copyable = Boolean(token) && status === "active"
+            const copyable = Boolean(token) && inv.status === "active"
             return (
               <div
                 key={inv.id}
@@ -136,7 +135,7 @@ export function InvitePanel({
                     {inv.token_prefix || inv.id}
                   </div>
                   <div className="small text-muted">
-                    {inv.role} · {status} · {usesLabel(inv)} · expires{" "}
+                    {inv.role} · {inv.status} · {usesLabel(inv)} · expires{" "}
                     {inv.expires_at}
                   </div>
                 </div>
@@ -159,7 +158,7 @@ export function InvitePanel({
                       </button>
                     </>
                   )}
-                  {status === "active" && (
+                  {inv.status === "active" && (
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-danger"

@@ -111,7 +111,7 @@ export type CreateInviteBody = {
   max_uses?: number | null
 }
 
-/** Create/list row. `token` only for admin/owner while `active`. */
+/** Create/list row. `token` only for admin/owner while `active`. Status is the lifecycle. */
 export type InviteListed = {
   id: string
   organization_id?: string
@@ -119,15 +119,12 @@ export type InviteListed = {
   email?: string | null
   token_prefix?: string
   token?: string | null
-  status?: InviteStatus
+  status: InviteStatus
   max_uses?: number | null
   use_count?: number
   expires_at: string
   created_by?: string
   created_at?: string
-  revoked_at?: string | null
-  redeemed_at?: string | null
-  redeemed_by?: string | null
 }
 
 export type InviteCreated = InviteListed & {
