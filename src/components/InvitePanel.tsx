@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { api } from "../api/endpoints"
-import type { InviteCreated, InviteListed, MemberRole } from "../api/types"
+import type { CreateInviteBody, InviteListed, MemberRole } from "../api/types"
 import { inviteAppUrl } from "../auth/session"
 
 const HUMAN_ROLES: MemberRole[] = ["member", "admin", "owner"]
@@ -13,6 +13,27 @@ const INVITE_TTL_OPTIONS: { label: string; value: string }[] = [
   { label: "30 days", value: "2592000" },
 ]
 
+const MAX_USES_OPTIONS: { label: string; value: string }[] = [
+  { label: "1 (default)", value: "" },
+  { label: "5", value: "5" },
+  { label: "10", value: "10" },
+  { label: "Unlimited", value: "unlimited" },
+]
+
+function rowToken(inv: InviteListed): string | null {
+  const t = inv.token?.trim()
+  return t ? t : null
+}
+
+function usesLabel(inv: InviteListed): string {
+  const used = inv.use_count ?? 0
+  if (inv.max_uses == null && inv.status === "active") {
+    return `${used}/∞`
+  }
+  if (inv.max_uses == null) return `${used}`
+  return `${used}/${inv.max_uses}`
+}
+
 export function InvitePanel({
   orgId,
   onError,
@@ -23,9 +44,9 @@ export function InvitePanel({
   const [invites, setInvites] = useState<InviteListed[]>([])
   const [inviteRole, setInviteRole] = useState<MemberRole>("member")
   const [inviteTtl, setInviteTtl] = useState("")
+  const [maxUses, setMaxUses] = useState("")
   const [creatingInvite, setCreatingInvite] = useState(false)
-  const [createdInvite, setCreatedInvite] = useState<InviteCreated | null>(null)
-  const [copied, setCopied] = useState<"link" | "token" | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
 
   async function loadInvites() {
     try {
@@ -36,7 +57,6 @@ export function InvitePanel({
   }
 
   useEffect(() => {
-    setCreatedInvite(null)
     void loadInvites()
   }, [orgId])
 
@@ -46,11 +66,11 @@ export function InvitePanel({
     return () => window.clearTimeout(t)
   }, [copied])
 
-  async function copyText(which: "link" | "token", token: string) {
+  async function copyText(key: string, which: "link" | "token", token: string) {
     const text = which === "link" ? inviteAppUrl(token) : token
     try {
       await navigator.clipboard.writeText(text)
-      setCopied(which)
+      setCopied(key)
     } catch {
       setCopied(null)
     }
@@ -59,16 +79,13 @@ export function InvitePanel({
   async function onCreateInvite(e: FormEvent) {
     e.preventDefault()
     setCreatingInvite(true)
-    setCreatedInvite(null)
     setCopied(null)
     try {
-      const body: { role: MemberRole; expires_in_seconds?: number } = {
-        role: inviteRole,
-      }
+      const body: CreateInviteBody = { role: inviteRole }
       if (inviteTtl) body.expires_in_seconds = Number(inviteTtl)
-      const created = await api.createInvite(orgId, body)
-      setCreatedInvite(created)
-      await copyText("link", created.token)
+      if (maxUses === "unlimited") body.max_uses = null
+      else if (maxUses) body.max_uses = Number(maxUses)
+      await api.createInvite(orgId, body)
       await loadInvites()
     } catch (err) {
       onError(err)
@@ -81,106 +98,85 @@ export function InvitePanel({
     if (!confirm("Revoke this invite?")) return
     try {
       await api.revokeInvite(orgId, id)
-      if (createdInvite?.id === id) setCreatedInvite(null)
       await loadInvites()
     } catch (err) {
       onError(err)
     }
   }
 
-  const createdLink = createdInvite
-    ? inviteAppUrl(createdInvite.token)
-    : null
-
   return (
     <div className="card mb-4">
-      <div className="card-header">Copy invite link</div>
+      <div className="card-header">Invites</div>
       <div className="card-body">
         <p className="small text-muted">
-          Mint a one-shot token (like an API key). Clipboard gets{" "}
-          <code>/login?invite=</code> on this app origin. Already signed in
-          → redeem immediately (skip PKCE). Else the invitee’s browser stashes
-          the token (first-party cookie + OAuth <code>state</code>-keyed stash),
-          strips the query, and starts PKCE — no <code>invite=</code> on{" "}
-          <code>/authorize</code>, token never in OAuth <code>state</code>. Then{" "}
-          <code>POST /api/invites/redeem</code> with <code>{"{ token }"}</code>{" "}
-          and the session JWT. They land as an <strong>active</strong> member.
-          Email is unbound. No SMTP, no pending row. Add-by-user_id below still
-          works. Expires in 7 days if omitted.
+          Mint an invite. Admin/owner can copy{" "}
+          <code>/invites?invite=</code> from an active row (identity returns{" "}
+          <code>token</code> only while active). Members see prefix and status,
+          not the token. Already signed in → redeem immediately. Else the app
+          stashes the token, strips the query, and starts PKCE — no{" "}
+          <code>invite=</code> on <code>/authorize</code>. Then{" "}
+          <code>POST /api/invites/redeem</code>. Omit max uses for 1; unlimited
+          sends JSON <code>null</code>. Add-by-user_id below still works.
         </p>
-        {createdInvite && createdLink && (
-          <div className="alert alert-warning">
-            <div className="fw-semibold mb-1">
-              Copy now — token will not be shown again
-            </div>
-            <code className="user-select-all d-block text-break mb-2">
-              {createdInvite.token}
-            </code>
-            <div className="small mb-2">
-              Link{" "}
-              <code className="user-select-all d-block text-break">
-                {createdLink}
-              </code>
-            </div>
-            <div className="d-flex flex-wrap gap-2 mb-2">
-              <button
-                type="button"
-                className="btn btn-sm btn-primary"
-                onClick={() => void copyText("link", createdInvite.token)}
-              >
-                {copied === "link" ? "Copied link" : "Copy link"}
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-outline-secondary"
-                onClick={() => void copyText("token", createdInvite.token)}
-              >
-                {copied === "token" ? "Copied token" : "Copy token"}
-              </button>
-            </div>
-            <div className="small text-muted">
-              role <code>{createdInvite.role}</code> · expires{" "}
-              {createdInvite.expires_at} · id{" "}
-              <code className="font-monospace">{createdInvite.id}</code>
-            </div>
-          </div>
-        )}
         <div className="list-group mb-3">
           {invites.length === 0 && (
-            <div className="list-group-item text-muted">
-              No invites listed.
-            </div>
+            <div className="list-group-item text-muted">No invites listed.</div>
           )}
-          {invites.map((inv) => (
-            <div
-              key={inv.id}
-              className="list-group-item d-flex flex-wrap gap-2 justify-content-between align-items-start"
-            >
-              <div>
-                <div className="small font-monospace">{inv.id}</div>
-                <div className="small text-muted">
-                  {inv.role} · expires {inv.expires_at}
-                  {inv.redeemed_at ? " · redeemed" : ""}
-                  {inv.revoked_at ? " · revoked" : ""}
+          {invites.map((inv) => {
+            const token = rowToken(inv)
+            const copyable = Boolean(token) && inv.status === "active"
+            return (
+              <div
+                key={inv.id}
+                className="list-group-item d-flex flex-wrap gap-2 justify-content-between align-items-start"
+              >
+                <div>
+                  <div className="small font-monospace">
+                    {inv.token_prefix || inv.id}
+                  </div>
+                  <div className="small text-muted">
+                    {inv.role} · {inv.status} · {usesLabel(inv)} · expires{" "}
+                    {inv.expires_at}
+                  </div>
+                </div>
+                <div className="d-flex flex-wrap gap-2">
+                  {copyable && token && (
+                    <>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        onClick={() => void copyText(`${inv.id}-link`, "link", token)}
+                      >
+                        {copied === `${inv.id}-link` ? "Copied link" : "Copy link"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={() => void copyText(`${inv.id}-token`, "token", token)}
+                      >
+                        {copied === `${inv.id}-token` ? "Copied token" : "Copy token"}
+                      </button>
+                    </>
+                  )}
+                  {inv.status === "active" && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-danger"
+                      onClick={() => void onRevokeInvite(inv.id)}
+                    >
+                      Revoke
+                    </button>
+                  )}
                 </div>
               </div>
-              {!inv.revoked_at && !inv.redeemed_at && (
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-danger"
-                  onClick={() => void onRevokeInvite(inv.id)}
-                >
-                  Revoke
-                </button>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
         <form
           className="row g-2 align-items-end"
           onSubmit={(e) => void onCreateInvite(e)}
         >
-          <div className="col-md-4">
+          <div className="col-md-3">
             <label className="form-label" htmlFor="invite_role">
               Role
             </label>
@@ -197,7 +193,7 @@ export function InvitePanel({
               ))}
             </select>
           </div>
-          <div className="col-md-5">
+          <div className="col-md-3">
             <label className="form-label" htmlFor="invite_ttl">
               Expires
             </label>
@@ -215,12 +211,29 @@ export function InvitePanel({
             </select>
           </div>
           <div className="col-md-3">
+            <label className="form-label" htmlFor="invite_max_uses">
+              Max uses
+            </label>
+            <select
+              id="invite_max_uses"
+              className="form-select"
+              value={maxUses}
+              onChange={(e) => setMaxUses(e.target.value)}
+            >
+              {MAX_USES_OPTIONS.map((opt) => (
+                <option key={opt.label} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="col-md-3">
             <button
               type="submit"
               className="btn btn-primary w-100"
               disabled={creatingInvite}
             >
-              {creatingInvite ? "…" : "Mint copy-link"}
+              {creatingInvite ? "…" : "Mint invite"}
             </button>
           </div>
         </form>

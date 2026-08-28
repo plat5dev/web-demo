@@ -102,20 +102,31 @@ export type CreateApiKeyBody = {
   scopes?: string[]
 }
 
-/** Mint response — token is returned once, like an API key. */
-export type InviteCreated = {
-  id: string
-  token: string
-  expires_at: string
-  role: MemberRole
+export type InviteStatus = "active" | "redeemed" | "revoked" | "expired"
+
+/** Create body. Omit `max_uses` for 1; JSON `null` = unlimited. */
+export type CreateInviteBody = {
+  role?: MemberRole
+  expires_in_seconds?: number
+  max_uses?: number | null
 }
 
-/** List/revoke echo; never includes token. */
+/** Create/list row. `token` only for admin/owner while `active`. Status is the lifecycle. */
 export type InviteListed = {
   id: string
+  organization_id?: string
   role: MemberRole
+  email?: string | null
+  token_prefix?: string
+  token?: string | null
+  status: InviteStatus
+  max_uses?: number | null
+  use_count?: number
   expires_at: string
+  created_by?: string
   created_at?: string
-  revoked_at?: string | null
-  redeemed_at?: string | null
+}
+
+export type InviteCreated = InviteListed & {
+  token: string
 }

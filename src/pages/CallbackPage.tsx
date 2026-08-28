@@ -12,6 +12,7 @@ let callbackStarted = false
 
 export function CallbackPage() {
   const [error, setError] = useState<unknown>(null)
+  const [joinFailed, setJoinFailed] = useState(false)
 
   useEffect(() => {
     if (callbackStarted) return
@@ -27,6 +28,7 @@ export function CallbackPage() {
             await api.redeemInvite(token)
           } catch (e: unknown) {
             // Keep cookie + by-state stash so the user can retry.
+            setJoinFailed(true)
             throw e
           }
           clearStashedInvite(oauthState)
@@ -44,10 +46,15 @@ export function CallbackPage() {
     return (
       <div className="row justify-content-center">
         <div className="col-md-8">
-          <h1 className="h4 mb-3">Sign-in failed</h1>
+          <h1 className="h4 mb-3">
+            {joinFailed ? "Could not join" : "Sign-in failed"}
+          </h1>
           <ErrorAlert error={error} />
           <div className="d-flex flex-wrap gap-2">
-            <a className="btn btn-outline-secondary" href="/login">
+            <a
+              className="btn btn-outline-secondary"
+              href={joinFailed ? "/invites" : "/login"}
+            >
               Try again
             </a>
             <a className="btn btn-outline-primary" href="/orgs">

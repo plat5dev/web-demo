@@ -3,6 +3,7 @@ import type {
   ApiKeyCreated,
   ApiKeyListed,
   CreateApiKeyBody,
+  CreateInviteBody,
   InviteCreated,
   InviteListed,
   Member,
@@ -111,10 +112,7 @@ export const api = {
     return data.invites ?? []
   },
 
-  createInvite: (
-    orgId: string,
-    body?: { role?: MemberRole; expires_in_seconds?: number },
-  ) =>
+  createInvite: (orgId: string, body?: CreateInviteBody) =>
     apiFetch<InviteCreated>(invitesBase(orgId), {
       method: "POST",
       body: JSON.stringify(body ?? {}),
