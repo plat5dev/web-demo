@@ -28,9 +28,11 @@ bun install
 bun run dev            # http://localhost:5173
 ```
 
-Sign in → Auth password UI (dev codes in Auth issuer logs when SMTP unset) → profile / user API keys / orgs (members, copy-invite-link, service accounts, member keys, admission probe) / projects / tasks.
+Sign in → Auth password UI (dev codes in Auth issuer logs when SMTP unset) → profile / user API keys / orgs (members, invites, service accounts, member keys, admission probe) / projects / tasks.
 
-Invite copy-link is `{origin}/login?invite={token}`. Already signed in: redeem immediately (skip PKCE). Else the app stashes the token in a first-party cookie (`plat5_web_demo_invite`, not Auth’s `plat5_invite_token`) plus an origin stash keyed by OAuth CSRF `state`, strips the query so Referer to Auth cannot leak it, starts PKCE (Auth `/authorize` does **not** get `invite=`; token never in OAuth `state`), then `POST /api/invites/redeem` with `{ "token" }` and the session JWT. Cookie/stash clear only after a successful redeem. Add-by-`user_id` still works. Email is unbound. No SMTP.
+Invite copy-link is `{origin}/invites?invite={token}`. There is no `/login?invite=` alias. Identity list returns plaintext `token` for admin/owner while the row is `active`; the app builds the URL. Members see prefix/status/role/expiry, not the token. Create `max_uses` omitted = 1; JSON `null` = unlimited.
+
+Already signed in: redeem immediately (skip PKCE). Else the app stashes the token in a first-party cookie (`plat5_web_demo_invite`, not Auth’s `plat5_invite_token`) plus an origin stash keyed by OAuth CSRF `state`, strips the query so Referer to Auth cannot leak it, starts PKCE (Auth `/authorize` does **not** get `invite=`; token never in OAuth `state`), then `POST /api/invites/redeem` with `{ "token" }` and the session JWT. Cookie/stash clear only after a successful redeem. Dead redeem (redeemed / revoked / expired) is **409** `CONFLICT`. Unknown token is **404**. Add-by-`user_id` still works. Email is unbound. No SMTP.
 
 ## Env
 
