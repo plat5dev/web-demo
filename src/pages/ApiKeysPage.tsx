@@ -6,7 +6,11 @@ import type { ApiKeyCreated, ApiKeyListed } from "../api/types"
 import { ApiError } from "../api/client"
 import { ErrorAlert } from "../components/ErrorAlert"
 import { useOrg } from "../org/OrgContext"
-import { memberKeyPrefix, userKeyPrefix } from "../config"
+import {
+  memberKeyPrefix,
+  memberSessionPrefix,
+  userKeyPrefix,
+} from "../config"
 
 type ProbeRow = {
   label: string
@@ -14,9 +18,25 @@ type ProbeRow = {
   expect: string
 }
 
+function credentialKind(key: string): string {
+  if (key.startsWith(memberSessionPrefix)) {
+    return `member session (${memberSessionPrefix})`
+  }
+  if (key.startsWith(memberKeyPrefix)) {
+    return `member key (${memberKeyPrefix})`
+  }
+  if (key.startsWith(userKeyPrefix)) {
+    return `user key (${userKeyPrefix})`
+  }
+  return "unknown prefix"
+}
+
+function isUserKey(key: string): boolean {
+  return key.startsWith(userKeyPrefix)
+}
+
 export function ApiKeysPage() {
-  const { activeOrg } = useOrg()
-  const [userId, setUserId] = useState<string | null>(null)
+  const { activeOrg, session } = useOrg()
   const [keys, setKeys] = useState<ApiKeyListed[]>([])
   const [name, setName] = useState("")
   const [scopesRaw, setScopesRaw] = useState("")
@@ -25,17 +45,17 @@ export function ApiKeysPage() {
   const [error, setError] = useState<unknown>(null)
   const [created, setCreated] = useState<ApiKeyCreated | null>(null)
   const [tryKey, setTryKey] = useState("")
-  const [tryPath, setTryPath] = useState("/api/organizations")
+  const [tryPath, setTryPath] = useState("/user/api-keys")
   const [trying, setTrying] = useState(false)
   const [tryResult, setTryResult] = useState<string | null>(null)
   const [matrixRunning, setMatrixRunning] = useState(false)
   const [matrixResult, setMatrixResult] = useState<string | null>(null)
 
-  async function load(uid: string) {
+  async function load() {
     setLoading(true)
     setError(null)
     try {
-      setKeys(await api.listApiKeys(uid))
+      setKeys(await api.listUserApiKeys())
     } catch (e) {
       setError(e)
       setKeys([])
@@ -45,26 +65,8 @@ export function ApiKeysPage() {
   }
 
   useEffect(() => {
-    void (async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const profile = await api.getProfileMe()
-        setUserId(profile.user_id)
-        await load(profile.user_id)
-      } catch (e) {
-        setError(e)
-        setKeys([])
-        setLoading(false)
-      }
-    })()
+    void load()
   }, [])
-
-  useEffect(() => {
-    if (activeOrg) {
-      setTryPath(`/api/organizations/${activeOrg.id}/projects`)
-    }
-  }, [activeOrg?.id])
 
   async function onCreate(e: FormEvent) {
     e.preventDefault()
@@ -72,16 +74,12 @@ export function ApiKeysPage() {
     setError(null)
     setCreated(null)
     try {
-      if (!userId) throw new Error("missing user id")
-      const key = await api.createApiKey(
-        userId,
-        mintKeyBody(name.trim(), scopesRaw),
-      )
+      const key = await api.createUserApiKey(mintKeyBody(name.trim(), scopesRaw))
       setName("")
       setScopesRaw("")
       setCreated(key)
       setTryKey(key.key)
-      await load(userId)
+      await load()
     } catch (err) {
       setError(err)
     } finally {
@@ -93,10 +91,9 @@ export function ApiKeysPage() {
     if (!confirm("Revoke this API key?")) return
     setError(null)
     try {
-      if (!userId) throw new Error("missing user id")
-      await api.deleteApiKey(userId, id)
+      await api.deleteUserApiKey(id)
       if (created?.id === id) setCreated(null)
-      await load(userId)
+      await load()
     } catch (err) {
       setError(err)
     }
@@ -140,42 +137,28 @@ export function ApiKeysPage() {
   }
 
   function probeRows(key: string): ProbeRow[] {
-    const isMemberKey = key.startsWith(memberKeyPrefix)
-    const orgPath = activeOrg
-      ? `/api/organizations/${activeOrg.id}/projects`
-      : null
-    const wrongOrgPath =
-      "/api/organizations/01ARZ3NDEKTSV4RRFFQ69G5FAV/projects"
-    const userPath = userId
-      ? `/api/users/${userId}/api-keys`
-      : "/api/organizations"
-
-    const rows: ProbeRow[] = [
+    const user = isUserKey(key)
+    return [
       {
-        label: "user-scope",
-        path: userPath,
-        expect: isMemberKey
-          ? "401 (member keys invalid on user scope)"
-          : "200 (user key)",
+        label: "user scope",
+        path: "/user/api-keys",
+        expect: user ? "200 (user key)" : "401 (not a user credential)",
+      },
+      {
+        label: "organization scope",
+        path: "/org",
+        expect: user
+          ? "401 (user keys do not cover organization scope)"
+          : "200 if this member credential is admitted",
+      },
+      {
+        label: "member scope",
+        path: "/member/projects",
+        expect: user
+          ? "401 (user keys do not cover member scope)"
+          : "200 if this member credential is admitted",
       },
     ]
-    if (orgPath) {
-      rows.push({
-        label: "org-scope (active org)",
-        path: orgPath,
-        expect: isMemberKey
-          ? "200 if key’s member is in this org"
-          : "200 if you are an active member (resolve)",
-      })
-    }
-    rows.push({
-      label: "org-scope (unknown org)",
-      path: wrongOrgPath,
-      expect: isMemberKey
-        ? "404 (org id ≠ key org) or 401"
-        : "404 (not a member)",
-    })
-    return rows
   }
 
   async function onMatrix() {
@@ -186,12 +169,7 @@ export function ApiKeysPage() {
     setError(null)
     try {
       const rows = probeRows(key)
-      const kind = key.startsWith(memberKeyPrefix)
-        ? `member key (${memberKeyPrefix})`
-        : key.startsWith(userKeyPrefix)
-          ? `user key (${userKeyPrefix})`
-          : "unknown prefix"
-      const parts: string[] = [`Key kind: ${kind}`, ""]
+      const parts: string[] = [`Key kind: ${credentialKind(key)}`, ""]
       for (const row of rows) {
         const result = await runProbe(row.path, key)
         parts.push(`### ${row.label}`)
@@ -212,14 +190,14 @@ export function ApiKeysPage() {
     <div>
       <h1 className="h3 mb-1">User API keys</h1>
       <p className="text-muted small mb-3">
-        Person credentials (<code>/api/users/{"{user_id}"}/api-keys</code>,
-        prefix <code>{userKeyPrefix}</code>). Same gateway as JWT via{" "}
-        <code>X-API-Key</code>. Member keys (<code>{memberKeyPrefix}</code>) are
-        minted on{" "}
+        Person credentials (<code>GET/POST /user/api-keys</code>, prefix{" "}
+        <code>{userKeyPrefix}</code>). Sent as <code>X-API-Key</code> on user
+        routes. They do not cover organization or member routes. Member keys (
+        <code>{memberKeyPrefix}</code>) are minted for the signed-in member on{" "}
         <Link to={activeOrg ? `/orgs/${activeOrg.id}` : "/orgs"}>
           org detail
-        </Link>{" "}
-        under a member or service account — paste them below to compare scopes.
+        </Link>
+        . Paste a key below to call a path with only <code>X-API-Key</code>.
       </p>
 
       <ErrorAlert error={error} onDismiss={() => setError(null)} />
@@ -235,7 +213,8 @@ export function ApiKeysPage() {
           <div className="small mt-1 text-muted">
             prefix <code>{created.key_prefix}</code> · id{" "}
             <code className="font-monospace">{created.id}</code>
-            {" · scopes "}{scopesSummary(created.scopes)}
+            {" · scopes "}
+            {scopesSummary(created.scopes)}
           </div>
         </div>
       )}
@@ -316,14 +295,14 @@ export function ApiKeysPage() {
                   <div className="form-text">
                     Comma or space separated labels your app owns. Leave blank
                     to omit <code>scopes</code> (unrestricted key). Insufficient
-                    scope on probe is gateway 403 — the error envelope is shown
-                    below.
+                    scope on a labeled route is gateway 403 — the error envelope
+                    is shown below.
                   </div>
                 </div>
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={creating || !name.trim() || !userId}
+                  disabled={creating || !name.trim()}
                 >
                   {creating ? "Creating…" : "Create"}
                 </button>
@@ -335,10 +314,10 @@ export function ApiKeysPage() {
         <div className="col-lg-6 mb-4">
           <h2 className="h5">Try with X-API-Key</h2>
           <p className="small text-muted">
-            Calls the gateway with only <code>X-API-Key</code> (no session
-            JWT). User keys work on user + org (via member resolve). Member
-            keys work on <strong>org scope only</strong>. Insufficient key
-            scope → gateway <strong>403</strong> with the Plat5 error envelope.
+            Calls the gateway with only <code>X-API-Key</code> (no user JWT).
+            User keys are admitted on user routes. Member keys and member
+            sessions are admitted on organization and member routes. A user JWT
+            on those routes is 401; this form does not send one.
           </p>
           <form className="card card-body" onSubmit={(e) => void onTry(e)}>
             <div className="mb-3">
@@ -353,6 +332,15 @@ export function ApiKeysPage() {
                 placeholder={`${userKeyPrefix}… or ${memberKeyPrefix}…`}
                 required
               />
+              {session && (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary mt-2"
+                  onClick={() => setTryKey(session.token)}
+                >
+                  Use member session
+                </button>
+              )}
             </div>
             <div className="mb-3">
               <label className="form-label" htmlFor="try_path">
@@ -369,34 +357,45 @@ export function ApiKeysPage() {
                 <button
                   type="button"
                   className="btn btn-sm btn-outline-secondary"
-                  onClick={() => setTryPath("/api/organizations")}
+                  onClick={() => setTryPath("/user/memberships")}
                 >
-                  list orgs
+                  memberships
                 </button>
-                {userId && (
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-secondary"
-                    onClick={() =>
-                      setTryPath(`/api/users/${userId}/api-keys`)
-                    }
-                  >
-                    user keys
-                  </button>
-                )}
-                {activeOrg && (
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-secondary"
-                    onClick={() =>
-                      setTryPath(
-                        `/api/organizations/${activeOrg.id}/projects`,
-                      )
-                    }
-                  >
-                    active org projects
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => setTryPath("/user/api-keys")}
+                >
+                  user keys
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => setTryPath("/user/profile")}
+                >
+                  profile
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => setTryPath("/org")}
+                >
+                  org
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => setTryPath("/member/projects")}
+                >
+                  projects
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => setTryPath("/member")}
+                >
+                  member
+                </button>
               </div>
             </div>
             <div className="d-flex flex-wrap gap-2">
@@ -419,7 +418,8 @@ export function ApiKeysPage() {
           </form>
           {!activeOrg && (
             <p className="small text-muted mt-2 mb-0">
-              Select an active org in the nav for the org-scope matrix row.
+              Select an organization to mint a member session. Member keys are
+              on that org’s page.
             </p>
           )}
           {tryResult && (

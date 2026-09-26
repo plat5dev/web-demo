@@ -6,18 +6,11 @@ import { ErrorAlert } from "./ErrorAlert"
 import { memberKeyPrefix } from "../config"
 
 type Props = {
-  orgId: string
+  sessionToken: string
   memberId: string
-  label: string
-  onCreatedKey?: (key: string) => void
 }
 
-export function MemberKeysPanel({
-  orgId,
-  memberId,
-  label,
-  onCreatedKey,
-}: Props) {
+export function MemberKeysPanel({ sessionToken, memberId }: Props) {
   const [keys, setKeys] = useState<ApiKeyListed[]>([])
   const [name, setName] = useState("")
   const [scopesRaw, setScopesRaw] = useState("")
@@ -30,7 +23,7 @@ export function MemberKeysPanel({
     setLoading(true)
     setError(null)
     try {
-      setKeys(await api.listMemberApiKeys(orgId, memberId))
+      setKeys(await api.listMemberApiKeys(sessionToken))
     } catch (e) {
       setError(e)
       setKeys([])
@@ -40,8 +33,26 @@ export function MemberKeysPanel({
   }
 
   useEffect(() => {
-    void load()
-  }, [orgId, memberId])
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    void (async () => {
+      try {
+        const list = await api.listMemberApiKeys(sessionToken)
+        if (!cancelled) setKeys(list)
+      } catch (e) {
+        if (!cancelled) {
+          setError(e)
+          setKeys([])
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [sessionToken])
 
   async function onCreate(e: FormEvent) {
     e.preventDefault()
@@ -50,14 +61,12 @@ export function MemberKeysPanel({
     setCreated(null)
     try {
       const key = await api.createMemberApiKey(
-        orgId,
-        memberId,
+        sessionToken,
         mintKeyBody(name.trim(), scopesRaw),
       )
       setName("")
       setScopesRaw("")
       setCreated(key)
-      onCreatedKey?.(key.key)
       await load()
     } catch (err) {
       setError(err)
@@ -70,7 +79,7 @@ export function MemberKeysPanel({
     if (!confirm("Revoke this member API key?")) return
     setError(null)
     try {
-      await api.deleteMemberApiKey(orgId, memberId, id)
+      await api.deleteMemberApiKey(sessionToken, id)
       if (created?.id === id) setCreated(null)
       await load()
     } catch (err) {
@@ -80,12 +89,13 @@ export function MemberKeysPanel({
 
   return (
     <div className="border rounded p-3 bg-body-tertiary">
-      <div className="fw-semibold small mb-2">
-        Member keys · <span className="text-muted">{label}</span>
-      </div>
+      <div className="fw-semibold small mb-2">Your member keys</div>
       <p className="small text-muted mb-2">
-        Prefix <code>{memberKeyPrefix}</code> · org scope only (
-        <code>X-API-Key</code>).
+        <code>GET/POST /member/api-keys</code> · prefix{" "}
+        <code>{memberKeyPrefix}</code> · member{" "}
+        <code className="font-monospace">{memberId}</code>. Sent as{" "}
+        <code>X-API-Key</code> on organization and member routes. User keys do
+        not cover those routes.
       </p>
 
       <ErrorAlert error={error} onDismiss={() => setError(null)} />
@@ -143,11 +153,11 @@ export function MemberKeysPanel({
 
       <form onSubmit={(e) => void onCreate(e)}>
         <div className="mb-2">
-          <label className="form-label small mb-1" htmlFor={`mk_${memberId}`}>
+          <label className="form-label small mb-1" htmlFor="member_key_name">
             Name
           </label>
           <input
-            id={`mk_${memberId}`}
+            id="member_key_name"
             className="form-control form-control-sm"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -159,12 +169,12 @@ export function MemberKeysPanel({
         <div className="mb-2">
           <label
             className="form-label small mb-1"
-            htmlFor={`mk_scopes_${memberId}`}
+            htmlFor="member_key_scopes"
           >
             Scopes (optional)
           </label>
           <input
-            id={`mk_scopes_${memberId}`}
+            id="member_key_scopes"
             className="form-control form-control-sm font-monospace"
             value={scopesRaw}
             onChange={(e) => setScopesRaw(e.target.value)}

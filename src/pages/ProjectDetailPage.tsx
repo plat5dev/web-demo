@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { Link, useParams } from "react-router-dom"
 import { api } from "../api/endpoints"
-import type { Project, Task, TaskStatus } from "../api/types"
+import { ApiError } from "../api/client"
+import type { MemberSession, Project, Task, TaskStatus } from "../api/types"
 import { ErrorAlert } from "../components/ErrorAlert"
 import { useOrg } from "../org/OrgContext"
 
@@ -9,7 +10,62 @@ const STATUSES: TaskStatus[] = ["todo", "in_progress", "done"]
 
 export function ProjectDetailPage() {
   const { projectId = "" } = useParams()
-  const { activeOrg } = useOrg()
+  const {
+    activeOrg,
+    session,
+    sessionLoading,
+    sessionError,
+    refreshSession,
+  } = useOrg()
+
+  if (!activeOrg) {
+    return (
+      <div className="alert alert-warning">
+        Select an organization. <Link to="/orgs">Organizations</Link>
+      </div>
+    )
+  }
+
+  if (sessionError) {
+    return (
+      <>
+        <ErrorAlert error={sessionError} />
+        <p className="small text-muted">
+          {sessionError instanceof ApiError && sessionError.status === 404
+            ? "Not an active member. Organization and member routes are not called with the user JWT."
+            : "Projects use a member session, not the user JWT."}
+        </p>
+        <button
+          type="button"
+          className="btn btn-sm btn-outline-secondary"
+          onClick={refreshSession}
+        >
+          Retry session
+        </button>
+      </>
+    )
+  }
+
+  if (sessionLoading || !session || !projectId) {
+    return <div className="text-muted">Opening member session…</div>
+  }
+
+  return (
+    <ProjectDetailLoaded
+      key={`${session.token}:${projectId}`}
+      session={session}
+      projectId={projectId}
+    />
+  )
+}
+
+function ProjectDetailLoaded({
+  session,
+  projectId,
+}: {
+  session: MemberSession
+  projectId: string
+}) {
   const [project, setProject] = useState<Project | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
   const [title, setTitle] = useState("")
@@ -26,35 +82,38 @@ export function ProjectDetailPage() {
   const [editTaskTitle, setEditTaskTitle] = useState("")
   const [savingTask, setSavingTask] = useState(false)
 
-  async function load(orgId: string, pid: string) {
-    setLoading(true)
-    setError(null)
-    try {
-      const [p, t] = await Promise.all([
-        api.getProject(orgId, pid),
-        api.listTasks(orgId, pid),
-      ])
-      setProject(p)
-      setEditName(p.name)
-      setEditDescription(p.description)
-      setTasks(t)
-    } catch (e) {
-      setError(e)
-      setProject(null)
-      setTasks([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
-    if (!activeOrg || !projectId) return
-    void load(activeOrg.id, projectId)
-  }, [activeOrg?.id, projectId])
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const [p, t] = await Promise.all([
+          api.getProject(session.token, projectId),
+          api.listTasks(session.token, projectId),
+        ])
+        if (cancelled) return
+        setProject(p)
+        setEditName(p.name)
+        setEditDescription(p.description)
+        setTasks(t)
+      } catch (e) {
+        if (cancelled) return
+        setError(e)
+        setProject(null)
+        setTasks([])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [session.token, projectId])
 
   async function onSaveProject(e: FormEvent) {
     e.preventDefault()
-    if (!activeOrg || !project) return
+    if (!project) return
     setSavingProject(true)
     setError(null)
     setProjectSaved(false)
@@ -68,11 +127,7 @@ export function ProjectDetailPage() {
         setProjectSaved(true)
         return
       }
-      const updated = await api.updateProject(
-        activeOrg.id,
-        project.id,
-        body,
-      )
+      const updated = await api.updateProject(session.token, project.id, body)
       setProject(updated)
       setEditName(updated.name)
       setEditDescription(updated.description)
@@ -86,13 +141,12 @@ export function ProjectDetailPage() {
 
   async function onCreateTask(e: FormEvent) {
     e.preventDefault()
-    if (!activeOrg || !projectId) return
     setCreating(true)
     setError(null)
     try {
-      await api.createTask(activeOrg.id, projectId, { title: title.trim() })
+      await api.createTask(session.token, projectId, { title: title.trim() })
       setTitle("")
-      setTasks(await api.listTasks(activeOrg.id, projectId))
+      setTasks(await api.listTasks(session.token, projectId))
     } catch (err) {
       setError(err)
     } finally {
@@ -101,11 +155,10 @@ export function ProjectDetailPage() {
   }
 
   async function onStatus(task: Task, status: TaskStatus) {
-    if (!activeOrg) return
     setError(null)
     try {
       const updated = await api.updateTask(
-        activeOrg.id,
+        session.token,
         task.project_id,
         task.id,
         { status },
@@ -122,7 +175,6 @@ export function ProjectDetailPage() {
   }
 
   async function onSaveTaskTitle(task: Task) {
-    if (!activeOrg) return
     const next = editTaskTitle.trim()
     if (!next || next === task.title) {
       setEditingTaskId(null)
@@ -132,7 +184,7 @@ export function ProjectDetailPage() {
     setError(null)
     try {
       const updated = await api.updateTask(
-        activeOrg.id,
+        session.token,
         task.project_id,
         task.id,
         { title: next },
@@ -147,23 +199,14 @@ export function ProjectDetailPage() {
   }
 
   async function onDeleteTask(task: Task) {
-    if (!activeOrg) return
     if (!confirm("Delete this task?")) return
     setError(null)
     try {
-      await api.deleteTask(activeOrg.id, task.project_id, task.id)
+      await api.deleteTask(session.token, task.project_id, task.id)
       setTasks((prev) => prev.filter((t) => t.id !== task.id))
     } catch (err) {
       setError(err)
     }
-  }
-
-  if (!activeOrg) {
-    return (
-      <div className="alert alert-warning">
-        Select an organization. <Link to="/orgs">Organizations</Link>
-      </div>
-    )
   }
 
   if (loading) {
@@ -194,6 +237,11 @@ export function ProjectDetailPage() {
 
       <h1 className="h3 mb-1">{project.name}</h1>
       <p className="small font-monospace text-muted mb-3">{project.id}</p>
+      <p className="small text-muted">
+        <code>/member/projects/{project.id}</code> with the member session (
+        <code>X-API-Key</code>), not a user JWT. The gateway fills the subject
+        into the path.
+      </p>
 
       <ErrorAlert error={error} onDismiss={() => setError(null)} />
       {projectSaved && (

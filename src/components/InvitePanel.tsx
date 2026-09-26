@@ -1,9 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { api } from "../api/endpoints"
-import type { InviteCreated, InviteListed, MemberRole } from "../api/types"
+import type { Invite } from "../api/types"
 import { inviteAppUrl } from "../auth/session"
-
-const HUMAN_ROLES: MemberRole[] = ["member", "admin", "owner"]
 
 const INVITE_TTL_OPTIONS: { label: string; value: string }[] = [
   { label: "Default (7 days)", value: "" },
@@ -14,31 +12,42 @@ const INVITE_TTL_OPTIONS: { label: string; value: string }[] = [
 ]
 
 export function InvitePanel({
-  orgId,
+  sessionToken,
   onError,
 }: {
-  orgId: string
+  sessionToken: string
   onError: (err: unknown) => void
 }) {
-  const [invites, setInvites] = useState<InviteListed[]>([])
-  const [inviteRole, setInviteRole] = useState<MemberRole>("member")
+  const [invites, setInvites] = useState<Invite[]>([])
   const [inviteTtl, setInviteTtl] = useState("")
   const [creatingInvite, setCreatingInvite] = useState(false)
-  const [createdInvite, setCreatedInvite] = useState<InviteCreated | null>(null)
+  const [createdInvite, setCreatedInvite] = useState<Invite | null>(null)
   const [copied, setCopied] = useState<"link" | "token" | null>(null)
 
   async function loadInvites() {
     try {
-      setInvites(await api.listInvites(orgId))
+      setInvites(await api.listInvites(sessionToken))
     } catch {
       setInvites([])
     }
   }
 
   useEffect(() => {
+    let cancelled = false
     setCreatedInvite(null)
-    void loadInvites()
-  }, [orgId])
+    setInvites([])
+    void (async () => {
+      try {
+        const list = await api.listInvites(sessionToken)
+        if (!cancelled) setInvites(list)
+      } catch {
+        if (!cancelled) setInvites([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [sessionToken])
 
   useEffect(() => {
     if (!copied) return
@@ -62,13 +71,11 @@ export function InvitePanel({
     setCreatedInvite(null)
     setCopied(null)
     try {
-      const body: { role: MemberRole; expires_in_seconds?: number } = {
-        role: inviteRole,
-      }
+      const body: { expires_in_seconds?: number } = {}
       if (inviteTtl) body.expires_in_seconds = Number(inviteTtl)
-      const created = await api.createInvite(orgId, body)
+      const created = await api.createInvite(sessionToken, body)
       setCreatedInvite(created)
-      await copyText("link", created.token)
+      if (created.token) await copyText("link", created.token)
       await loadInvites()
     } catch (err) {
       onError(err)
@@ -80,7 +87,7 @@ export function InvitePanel({
   async function onRevokeInvite(id: string) {
     if (!confirm("Revoke this invite?")) return
     try {
-      await api.revokeInvite(orgId, id)
+      await api.revokeInvite(sessionToken, id)
       if (createdInvite?.id === id) setCreatedInvite(null)
       await loadInvites()
     } catch (err) {
@@ -88,7 +95,7 @@ export function InvitePanel({
     }
   }
 
-  const createdLink = createdInvite
+  const createdLink = createdInvite?.token
     ? inviteAppUrl(createdInvite.token)
     : null
 
@@ -97,22 +104,21 @@ export function InvitePanel({
       <div className="card-header">Copy invite link</div>
       <div className="card-body">
         <p className="small text-muted">
-          Mint a one-shot token (like an API key). Clipboard gets{" "}
-          <code>/login?invite=</code> on this app origin. Already signed in
-          → redeem immediately (skip PKCE). Else the invitee’s browser stashes
-          the token (first-party cookie + OAuth <code>state</code>-keyed stash),
-          strips the query, and starts PKCE — no <code>invite=</code> on{" "}
-          <code>/authorize</code>, token never in OAuth <code>state</code>. Then{" "}
-          <code>POST /api/invites/redeem</code> with <code>{"{ token }"}</code>{" "}
-          and the session JWT. They land as an <strong>active</strong> member.
-          Email is unbound. No SMTP, no pending row. Add-by-user_id below still
-          works. Expires in 7 days if omitted.
+          Mint an invite on <code>POST /org/invites</code> with the member
+          session. Clipboard gets <code>/login?invite=</code> on this app
+          origin. Already signed in → redeem immediately (skip PKCE). Else the
+          invitee’s browser stashes the token (first-party cookie + OAuth{" "}
+          <code>state</code>-keyed stash), strips the query, and starts PKCE —
+          no <code>invite=</code> on <code>/authorize</code>, token never in
+          OAuth <code>state</code>. Then <code>POST /user/invites/redeem</code>{" "}
+          with <code>{"{ token }"}</code> and the user JWT. They land as an{" "}
+          <strong>active</strong> member. Email is unbound. No SMTP. Add-by-
+          user_id below still works. Token is on the row while the invite is
+          active. Expires in 7 days if omitted.
         </p>
-        {createdInvite && createdLink && (
+        {createdInvite && createdLink && createdInvite.token && (
           <div className="alert alert-warning">
-            <div className="fw-semibold mb-1">
-              Copy now — token will not be shown again
-            </div>
+            <div className="fw-semibold mb-1">Invite minted</div>
             <code className="user-select-all d-block text-break mb-2">
               {createdInvite.token}
             </code>
@@ -126,30 +132,27 @@ export function InvitePanel({
               <button
                 type="button"
                 className="btn btn-sm btn-primary"
-                onClick={() => void copyText("link", createdInvite.token)}
+                onClick={() => void copyText("link", createdInvite.token!)}
               >
                 {copied === "link" ? "Copied link" : "Copy link"}
               </button>
               <button
                 type="button"
                 className="btn btn-sm btn-outline-secondary"
-                onClick={() => void copyText("token", createdInvite.token)}
+                onClick={() => void copyText("token", createdInvite.token!)}
               >
                 {copied === "token" ? "Copied token" : "Copy token"}
               </button>
             </div>
             <div className="small text-muted">
-              role <code>{createdInvite.role}</code> · expires{" "}
-              {createdInvite.expires_at} · id{" "}
+              {createdInvite.status} · expires {createdInvite.expires_at} · id{" "}
               <code className="font-monospace">{createdInvite.id}</code>
             </div>
           </div>
         )}
         <div className="list-group mb-3">
           {invites.length === 0 && (
-            <div className="list-group-item text-muted">
-              No invites listed.
-            </div>
+            <div className="list-group-item text-muted">No invites listed.</div>
           )}
           {invites.map((inv) => (
             <div
@@ -157,22 +160,36 @@ export function InvitePanel({
               className="list-group-item d-flex flex-wrap gap-2 justify-content-between align-items-start"
             >
               <div>
-                <div className="small font-monospace">{inv.id}</div>
+                <div className="small font-monospace">
+                  {inv.token_prefix}… · {inv.id}
+                </div>
                 <div className="small text-muted">
-                  {inv.role} · expires {inv.expires_at}
-                  {inv.redeemed_at ? " · redeemed" : ""}
-                  {inv.revoked_at ? " · revoked" : ""}
+                  {inv.status}
+                  {inv.email ? ` · ${inv.email}` : ""}
+                  {` · ${inv.use_count}/${inv.max_uses ?? "unlimited"}`}
+                  {` · expires ${inv.expires_at}`}
                 </div>
               </div>
-              {!inv.revoked_at && !inv.redeemed_at && (
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-danger"
-                  onClick={() => void onRevokeInvite(inv.id)}
-                >
-                  Revoke
-                </button>
-              )}
+              <div className="d-flex flex-wrap gap-1">
+                {inv.token && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => void copyText("link", inv.token!)}
+                  >
+                    Copy link
+                  </button>
+                )}
+                {inv.status === "active" && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-danger"
+                    onClick={() => void onRevokeInvite(inv.id)}
+                  >
+                    Revoke
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -180,24 +197,7 @@ export function InvitePanel({
           className="row g-2 align-items-end"
           onSubmit={(e) => void onCreateInvite(e)}
         >
-          <div className="col-md-4">
-            <label className="form-label" htmlFor="invite_role">
-              Role
-            </label>
-            <select
-              id="invite_role"
-              className="form-select"
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value as MemberRole)}
-            >
-              {HUMAN_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="col-md-5">
+          <div className="col-md-8">
             <label className="form-label" htmlFor="invite_ttl">
               Expires
             </label>
@@ -214,7 +214,7 @@ export function InvitePanel({
               ))}
             </select>
           </div>
-          <div className="col-md-3">
+          <div className="col-md-4">
             <button
               type="submit"
               className="btn btn-primary w-100"

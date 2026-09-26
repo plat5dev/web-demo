@@ -14,8 +14,9 @@ export function HomePage() {
           <img src="/logo.jpg" alt="Plat5" className="home-logo mb-3" />
           <h1 className="display-6">Plat5 web demo</h1>
           <p className="lead mb-3">
-            Sample SPA against the gateway: OIDC login, user/member API keys,
-            orgs + members + service accounts, and org-scoped projects/tasks.
+            Sample SPA against the gateway: OIDC login, user and member API
+            keys, orgs, members, service accounts, and member-scoped projects
+            and tasks.
           </p>
           {!authenticated ? (
             <button
@@ -51,19 +52,26 @@ export function HomePage() {
           <div className="card-header">What this demos</div>
           <ul className="list-group list-group-flush">
             <li className="list-group-item">
-              <strong>OIDC + PKCE</strong> → JWT on every gateway call
+              <strong>OIDC + PKCE</strong> → user JWT on user routes
             </li>
             <li className="list-group-item">
-              <strong>User API keys</strong> (<code>{userKeyPrefix}</code>) → user
-              + org scope via <code>X-API-Key</code>
+              <strong>User API keys</strong> (<code>{userKeyPrefix}</code>) →
+              user routes via <code>X-API-Key</code>. Not organization or member
+              routes.
             </li>
             <li className="list-group-item">
-              <strong>Member API keys</strong> (<code>{memberKeyPrefix}</code>) → org
-              scope only; mint on a member or service account
+              <strong>Member session</strong> → minted for the active org;
+              organization, member, project, and task calls send it as{" "}
+              <code>X-API-Key</code>, not the user JWT
             </li>
             <li className="list-group-item">
-              <strong>Orgs + members + service accounts</strong> → identity;
-              admission probe shows non-member <code>404</code>
+              <strong>Member API keys</strong> (<code>{memberKeyPrefix}</code>) →
+              the signed-in member’s keys on <code>/member/api-keys</code>
+            </li>
+            <li className="list-group-item">
+              <strong>Orgs, members, invites, service accounts</strong> → member
+              session. The gateway fills the subject into the path. Not an
+              active member → session mint <code>404</code>
             </li>
             <li className="list-group-item">
               <strong>Copy invite link</strong> →{" "}
@@ -71,11 +79,12 @@ export function HomePage() {
               immediately. Else this origin stashes (cookie +{" "}
               <code>state</code>-keyed), strips the query, PKCE with no{" "}
               <code>invite=</code> on authorize, then{" "}
-              <code>POST /api/invites/redeem</code>. One-shot, no SMTP.
+              <code>POST /user/invites/redeem</code> with the user JWT. Email is
+              unbound. No SMTP.
             </li>
             <li className="list-group-item">
-              <strong>Projects / tasks</strong> → template business API
-              (org scope)
+              <strong>Projects / tasks</strong> → <code>/member/projects</code>{" "}
+              with the member session
             </li>
           </ul>
         </div>
@@ -94,8 +103,8 @@ export function HomePage() {
               Template API on <code>:3000</code> with routes applied
             </li>
             <li className="list-group-item">
-              Create an org → SA + member keys → user keys probe matrix →
-              projects &amp; tasks
+              Create an org → member session → your member keys → user key
+              probe → projects &amp; tasks
             </li>
           </ul>
         </div>

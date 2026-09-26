@@ -18,3 +18,4 @@ export const config = {
 
 export const userKeyPrefix = `${config.apiKeyBrand}-sk-1-`
 export const memberKeyPrefix = `${config.apiKeyBrand}-mk-1-`
+export const memberSessionPrefix = `${config.apiKeyBrand}-ms-1-`

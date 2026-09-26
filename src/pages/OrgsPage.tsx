@@ -1,11 +1,21 @@
 import { useState, type FormEvent } from "react"
 import { Link } from "react-router-dom"
 import { api } from "../api/endpoints"
+import { ApiError } from "../api/client"
 import { ErrorAlert } from "../components/ErrorAlert"
 import { useOrg } from "../org/OrgContext"
 
 export function OrgsPage() {
-  const { orgs, activeOrg, setActiveOrgId, refresh, loading } = useOrg()
+  const {
+    orgs,
+    activeOrg,
+    setActiveOrgId,
+    refresh,
+    loading,
+    error: loadError,
+    sessionError,
+    refreshSession,
+  } = useOrg()
   const [name, setName] = useState("")
   const [slug, setSlug] = useState("")
   const [creating, setCreating] = useState(false)
@@ -36,11 +46,31 @@ export function OrgsPage() {
       <div className="col-lg-7">
         <h1 className="h3 mb-3">Organizations</h1>
         <p className="text-muted small">
-          Platform API (<code>/api/organizations</code>, user scope). Active
-          org is used for projects/tasks (organization scope). Open an org for
-          members and admission probe.
+          <code>GET /user/memberships</code> with the user JWT. Creating one is{" "}
+          <code>POST /user/organizations</code>. The active org mints a member
+          session (<code>POST /user/organizations/{"{id}"}/session</code>).
+          Organization and member calls send that token as <code>X-API-Key</code>,
+          not the user JWT. The gateway fills the subject into the path.
         </p>
         <ErrorAlert error={error} onDismiss={() => setError(null)} />
+        <ErrorAlert error={loadError} />
+        {sessionError != null && (
+          <>
+            <ErrorAlert error={sessionError} />
+            <p className="small text-muted">
+              {sessionError instanceof ApiError && sessionError.status === 404
+                ? "Not an active member. Organization routes are not called with the user JWT."
+                : "Member session was not minted. Organization routes use that session, not the user JWT."}
+            </p>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-secondary mb-3"
+              onClick={refreshSession}
+            >
+              Retry session
+            </button>
+          </>
+        )}
 
         {loading && <div className="text-muted mb-3">Loading…</div>}
 

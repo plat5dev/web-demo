@@ -84,12 +84,13 @@ export function LoginPage() {
             <ErrorAlert error={error} onDismiss={() => setError(null)} />
             {pendingInvite ? (
               <p className="text-muted">
-                One-shot invite. If you are already signed in, this page redeems
+                If you are already signed in, this page redeems
                 immediately (no PKCE). Otherwise the token is stashed in a
                 first-party cookie and keyed by OAuth <code>state</code> on this
                 origin — <code>invite=</code> is stripped so Referer cannot leak
                 it, and is not sent to <code>/authorize</code>. After sign-in the
-                app <code>POST /api/invites/redeem</code>s with the session JWT.
+                app <code>POST /user/invites/redeem</code>s with{" "}
+                <code>{"{ token }"}</code> and the user JWT.
               </p>
             ) : (
               <p className="text-muted">

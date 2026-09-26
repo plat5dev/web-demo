@@ -16,17 +16,28 @@ export type Profile = {
   updated_at: string
 }
 
-export type Organization = {
+export type OrganizationRef = {
   id: string
   name: string
   slug: string
+}
+
+export type Organization = OrganizationRef & {
   created_at: string
   updated_at: string
 }
 
-export type MemberRole = "member" | "admin" | "owner"
+/** Active user membership. `id` is the member id. */
+export type Membership = {
+  id: string
+  organization: OrganizationRef
+  status: "active"
+}
 
 export type MemberStatus = "active" | "suspended" | "removed"
+
+/** `PATCH /member` accepts these only. */
+export type MemberPatchStatus = "active" | "suspended"
 
 export type Member = {
   id: string
@@ -34,19 +45,18 @@ export type Member = {
   principal: "user" | "service_account"
   user_id: string | null
   service_account_id: string | null
-  role: MemberRole
   status: MemberStatus
   added_by: string | null
   created_at: string
   updated_at: string
 }
 
-/** @deprecated use Member */
-export type Membership = Member
-/** @deprecated use MemberRole */
-export type MembershipRole = MemberRole
-/** @deprecated use MemberStatus */
-export type MembershipStatus = MemberStatus
+export type MemberSession = {
+  token: string
+  expires_at: string
+  member_id: string
+  organization_id: string
+}
 
 export type Project = {
   id: string
@@ -102,20 +112,25 @@ export type CreateApiKeyBody = {
   scopes?: string[]
 }
 
-/** Mint response — token is returned once, like an API key. */
-export type InviteCreated = {
+export type InviteStatus = "active" | "redeemed" | "revoked" | "expired"
+
+/** Invite row. `token` is present while `status` is `active`. */
+export type Invite = {
   id: string
-  token: string
+  organization_id: string
+  email: string | null
+  token_prefix: string
+  token?: string
+  status: InviteStatus
+  max_uses: number | null
+  use_count: number
   expires_at: string
-  role: MemberRole
+  created_by: string | null
+  created_at: string
 }
 
-/** List/revoke echo; never includes token. */
-export type InviteListed = {
-  id: string
-  role: MemberRole
-  expires_at: string
-  created_at?: string
-  revoked_at?: string | null
-  redeemed_at?: string | null
+export type CreateInviteBody = {
+  email?: string
+  expires_in_seconds?: number
+  max_uses?: number | null
 }

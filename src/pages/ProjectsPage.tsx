@@ -1,71 +1,19 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { Link } from "react-router-dom"
 import { api } from "../api/endpoints"
-import type { Project } from "../api/types"
+import { ApiError } from "../api/client"
+import type { MemberSession, Project } from "../api/types"
 import { ErrorAlert } from "../components/ErrorAlert"
 import { useOrg } from "../org/OrgContext"
 
 export function ProjectsPage() {
-  const { activeOrg } = useOrg()
-  const [projects, setProjects] = useState<Project[]>([])
-  const [name, setName] = useState("")
-  const [description, setDescription] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [error, setError] = useState<unknown>(null)
-
-  async function load(orgId: string) {
-    setLoading(true)
-    setError(null)
-    try {
-      setProjects(await api.listProjects(orgId))
-    } catch (e) {
-      setError(e)
-      setProjects([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!activeOrg) {
-      setProjects([])
-      return
-    }
-    void load(activeOrg.id)
-  }, [activeOrg?.id])
-
-  async function onCreate(e: FormEvent) {
-    e.preventDefault()
-    if (!activeOrg) return
-    setCreating(true)
-    setError(null)
-    try {
-      await api.createProject(activeOrg.id, {
-        name: name.trim(),
-        description: description.trim() || undefined,
-      })
-      setName("")
-      setDescription("")
-      await load(activeOrg.id)
-    } catch (err) {
-      setError(err)
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  async function onDelete(projectId: string) {
-    if (!activeOrg) return
-    if (!confirm("Delete this project?")) return
-    setError(null)
-    try {
-      await api.deleteProject(activeOrg.id, projectId)
-      await load(activeOrg.id)
-    } catch (err) {
-      setError(err)
-    }
-  }
+  const {
+    activeOrg,
+    session,
+    sessionLoading,
+    sessionError,
+    refreshSession,
+  } = useOrg()
 
   if (!activeOrg) {
     return (
@@ -76,14 +24,121 @@ export function ProjectsPage() {
     )
   }
 
+  if (sessionError) {
+    return (
+      <>
+        <ErrorAlert error={sessionError} />
+        <p className="small text-muted">
+          {sessionError instanceof ApiError && sessionError.status === 404
+            ? "Not an active member. Organization and member routes are not called with the user JWT."
+            : "Projects use a member session, not the user JWT."}
+        </p>
+        <button
+          type="button"
+          className="btn btn-sm btn-outline-secondary"
+          onClick={refreshSession}
+        >
+          Retry session
+        </button>
+      </>
+    )
+  }
+
+  if (sessionLoading || !session) {
+    return <div className="text-muted">Opening member session…</div>
+  }
+
+  return <ProjectsLoaded key={session.token} session={session} orgName={activeOrg.name} />
+}
+
+function ProjectsLoaded({
+  session,
+  orgName,
+}: {
+  session: MemberSession
+  orgName: string
+}) {
+  const [projects, setProjects] = useState<Project[]>([])
+  const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState<unknown>(null)
+
+  async function load() {
+    setLoading(true)
+    setError(null)
+    try {
+      setProjects(await api.listProjects(session.token))
+    } catch (e) {
+      setError(e)
+      setProjects([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    void (async () => {
+      try {
+        const list = await api.listProjects(session.token)
+        if (!cancelled) setProjects(list)
+      } catch (e) {
+        if (!cancelled) {
+          setError(e)
+          setProjects([])
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [session.token])
+
+  async function onCreate(e: FormEvent) {
+    e.preventDefault()
+    setCreating(true)
+    setError(null)
+    try {
+      await api.createProject(session.token, {
+        name: name.trim(),
+        description: description.trim() || undefined,
+      })
+      setName("")
+      setDescription("")
+      await load()
+    } catch (err) {
+      setError(err)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  async function onDelete(projectId: string) {
+    if (!confirm("Delete this project?")) return
+    setError(null)
+    try {
+      await api.deleteProject(session.token, projectId)
+      await load()
+    } catch (err) {
+      setError(err)
+    }
+  }
+
   return (
     <div>
       <div className="d-flex justify-content-between align-items-start mb-3">
         <div>
           <h1 className="h3 mb-1">Projects</h1>
           <p className="text-muted small mb-0">
-            Org <strong>{activeOrg.name}</strong> · organization scope via
-            gateway
+            Org <strong>{orgName}</strong> · <code>/member/projects</code> with
+            the member session (<code>X-API-Key</code>), not a user JWT. The
+            gateway fills the subject into the path.
           </p>
         </div>
       </div>

@@ -28,9 +28,11 @@ bun install
 bun run dev            # http://localhost:5173
 ```
 
-Sign in → Auth password UI (dev codes in Auth issuer logs when SMTP unset) → profile / user API keys / orgs (members, copy-invite-link, service accounts, member keys, admission probe) / projects / tasks.
+Sign in → Auth password UI (dev codes in Auth issuer logs when SMTP unset) → profile / user API keys / orgs (member session, members, copy-invite-link, service accounts, your member keys, session probe) / projects / tasks.
 
-Invite copy-link is `{origin}/login?invite={token}`. Already signed in: redeem immediately (skip PKCE). Else the app stashes the token in a first-party cookie (`plat5_web_demo_invite`, not Auth’s `plat5_invite_token`) plus an origin stash keyed by OAuth CSRF `state`, strips the query so Referer to Auth cannot leak it, starts PKCE (Auth `/authorize` does **not** get `invite=`; token never in OAuth `state`), then `POST /api/invites/redeem` with `{ "token" }` and the session JWT. Cookie/stash clear only after a successful redeem. Add-by-`user_id` still works. Email is unbound. No SMTP.
+The browser does not send subject ids. User routes use the user JWT (`Authorization: Bearer`). Opening an org mints a member session (`POST /user/organizations/{id}/session`). Organization and member routes, including `/member/projects`, send that token as `X-API-Key`, not the user JWT. The gateway fills the subject into the path. A user JWT on those routes is 401. Not an active member → session mint 404; the app does not then call `/org`.
+
+Invite copy-link is `{origin}/login?invite={token}`. Already signed in: redeem immediately (skip PKCE). Else the app stashes the token in a first-party cookie (`plat5_web_demo_invite`) plus an origin stash keyed by OAuth CSRF `state`, strips the query so Referer to Auth cannot leak it, starts PKCE (Auth `/authorize` does **not** get `invite=`; token never in OAuth `state`), then `POST /user/invites/redeem` with `{ "token" }` and the user JWT. Cookie/stash clear only after a successful redeem. Add-by-`user_id` still works. Email is unbound. No SMTP.
 
 ## Env
 
@@ -47,7 +49,7 @@ Invite copy-link is `{origin}/login?invite={token}`. Already signed in: redeem i
 
 Plat5 Auth (OpenAuth) returns **access + refresh** tokens (no `id_token`). This app uses authorization-code + **PKCE** against `/authorize` and `/token`, not a full OIDC client library.
 
-API calls send `Authorization: Bearer <access_token>` only. Never inject identity headers from the browser.
+User routes send `Authorization: Bearer <access_token>`. Organization and member routes send the member session (or a member key) as `X-API-Key`. Do not send both headers on one call. The browser does not send subject ids; the gateway fills the subject into the path. User API keys cover user routes only.
 
 **JWT `iss` must match gateway `AUTH_ISSUER` exactly.**  
 `http://localhost:5000` ≠ `http://127.0.0.1:5000`. Use the same host string in:

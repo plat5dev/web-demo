@@ -4,7 +4,8 @@ import { api } from "../api/endpoints"
 import { ApiError } from "../api/client"
 import type {
   Member,
-  MemberRole,
+  MemberPatchStatus,
+  MemberSession,
   Organization,
   Profile,
   ServiceAccount,
@@ -13,13 +14,64 @@ import { ErrorAlert } from "../components/ErrorAlert"
 import { InvitePanel } from "../components/InvitePanel"
 import { MemberKeysPanel } from "../components/MemberKeysPanel"
 import { useOrg } from "../org/OrgContext"
-import { memberKeyPrefix } from "../config"
 
-const HUMAN_ROLES: MemberRole[] = ["member", "admin", "owner"]
-const SA_ROLES: MemberRole[] = ["member", "admin"]
+const SELF_STATUSES: MemberPatchStatus[] = ["active", "suspended"]
 
 export function OrgDetailPage() {
   const { orgId = "" } = useParams()
+  const {
+    activeOrgId,
+    setActiveOrgId,
+    session,
+    sessionLoading,
+    sessionError,
+    refreshSession,
+  } = useOrg()
+
+  useEffect(() => {
+    if (orgId && orgId !== activeOrgId) setActiveOrgId(orgId)
+  }, [orgId, activeOrgId, setActiveOrgId])
+
+  if (!orgId) {
+    return <Link to="/orgs">← Organizations</Link>
+  }
+
+  if (sessionError && activeOrgId === orgId) {
+    return (
+      <>
+        <ErrorAlert error={sessionError} />
+        <p className="small text-muted">
+          {sessionError instanceof ApiError && sessionError.status === 404
+            ? "Not an active member. Organization routes are not called with the user JWT."
+            : "Organization and member routes use a member session, not the user JWT."}
+        </p>
+        <div className="d-flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary"
+            onClick={refreshSession}
+          >
+            Retry session
+          </button>
+          <Link to="/orgs">← Organizations</Link>
+        </div>
+      </>
+    )
+  }
+
+  if (
+    sessionLoading ||
+    activeOrgId !== orgId ||
+    !session ||
+    session.organization_id !== orgId
+  ) {
+    return <div className="text-muted">Opening member session…</div>
+  }
+
+  return <OrgDetailLoaded key={session.token} session={session} />
+}
+
+function OrgDetailLoaded({ session }: { session: MemberSession }) {
   const navigate = useNavigate()
   const { refresh: refreshOrgs, setActiveOrgId, activeOrg } = useOrg()
 
@@ -36,52 +88,66 @@ export function OrgDetailPage() {
   const [saved, setSaved] = useState(false)
 
   const [memberUserId, setMemberUserId] = useState("")
-  const [memberRole, setMemberRole] = useState<MemberRole>("member")
   const [adding, setAdding] = useState(false)
+  const [statusSaving, setStatusSaving] = useState(false)
 
   const [saName, setSaName] = useState("")
   const [creatingSa, setCreatingSa] = useState(false)
-
-  const [keysMemberId, setKeysMemberId] = useState<string | null>(null)
 
   const [probeOrgId, setProbeOrgId] = useState("")
   const [probing, setProbing] = useState(false)
   const [probeResult, setProbeResult] = useState<string | null>(null)
 
-  async function load(id: string) {
-    setLoading(true)
-    setError(null)
-    try {
-      const [o, m, sas, profile] = await Promise.all([
-        api.getOrganization(id),
-        api.listMembers(id),
-        api.listServiceAccounts(id),
-        api.getProfileMe(),
-      ])
-      setOrg(o)
-      setName(o.name)
-      setSlug(o.slug)
-      setMembers(m)
-      setServiceAccounts(sas)
-      setMe(profile)
-    } catch (e) {
-      setError(e)
-      setOrg(null)
-      setMembers([])
-      setServiceAccounts([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
-    if (!orgId) return
-    void load(orgId)
-  }, [orgId])
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const [o, m, sas, self] = await Promise.all([
+          api.getOrg(session.token),
+          api.listMembers(session.token),
+          api.listServiceAccounts(session.token),
+          api.getMember(session.token),
+        ])
+        if (cancelled) return
+        setOrg(o)
+        setName(o.name)
+        setSlug(o.slug)
+        setMembers(m.some((row) => row.id === self.id) ? m : [self, ...m])
+        setServiceAccounts(sas)
+        void api.getProfile().then(
+          (profile) => {
+            if (!cancelled) setMe(profile)
+          },
+          () => {
+            if (!cancelled) setMe(null)
+          },
+        )
+      } catch (e) {
+        if (cancelled) return
+        setError(e)
+        setOrg(null)
+        setMembers([])
+        setServiceAccounts([])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [session.token])
 
-  const myMember = members.find(
-    (m) => m.principal === "user" && m.user_id === me?.user_id,
-  )
+  async function reloadMembers() {
+    const [mList, saList, self] = await Promise.all([
+      api.listMembers(session.token),
+      api.listServiceAccounts(session.token),
+      api.getMember(session.token),
+    ])
+    setMembers(mList.some((row) => row.id === self.id) ? mList : [self, ...mList])
+    setServiceAccounts(saList)
+  }
 
   async function onSave(e: FormEvent) {
     e.preventDefault()
@@ -97,7 +163,7 @@ export function OrgDetailPage() {
         setSaved(true)
         return
       }
-      const updated = await api.updateOrganization(org.id, body)
+      const updated = await api.updateOrg(session.token, body)
       setOrg(updated)
       setName(updated.name)
       setSlug(updated.slug)
@@ -116,7 +182,7 @@ export function OrgDetailPage() {
       return
     setError(null)
     try {
-      await api.deleteOrganization(org.id)
+      await api.deleteOrg(session.token)
       if (activeOrg?.id === org.id) setActiveOrgId(null)
       await refreshOrgs()
       navigate("/orgs")
@@ -131,12 +197,9 @@ export function OrgDetailPage() {
     setAdding(true)
     setError(null)
     try {
-      await api.createMember(org.id, {
-        user_id: memberUserId.trim(),
-        role: memberRole,
-      })
+      await api.createMember(session.token, { user_id: memberUserId.trim() })
       setMemberUserId("")
-      setMembers(await api.listMembers(org.id))
+      await reloadMembers()
     } catch (err) {
       setError(err)
     } finally {
@@ -144,37 +207,44 @@ export function OrgDetailPage() {
     }
   }
 
-  async function onRole(m: Member, role: MemberRole) {
-    if (!org || m.role === role) return
+  async function onSelfStatus(status: MemberPatchStatus) {
+    const mine = members.find((m) => m.id === session.member_id)
+    if (!mine || mine.status === status) return
+    if (status === "suspended") {
+      if (
+        !confirm(
+          "Suspend your membership? A suspended member does not get a member session, so organization routes will not admit you.",
+        )
+      )
+        return
+    }
+    setStatusSaving(true)
     setError(null)
     try {
-      const updated = await api.updateMember(org.id, m.id, { role })
-      setMembers((prev) =>
-        prev.map((x) => (x.id === updated.id ? updated : x)),
-      )
+      await api.updateMember(session.token, { status })
+      if (status === "suspended") {
+        setActiveOrgId(null)
+        await refreshOrgs()
+        navigate("/orgs")
+        return
+      }
+      await reloadMembers()
     } catch (err) {
       setError(err)
+    } finally {
+      setStatusSaving(false)
     }
   }
 
-  async function onRemove(m: Member) {
+  async function onLeave() {
     if (!org) return
-    const label =
-      m.principal === "service_account"
-        ? (serviceAccounts.find((s) => s.id === m.service_account_id)?.name ??
-          m.service_account_id)
-        : m.user_id
-    if (!confirm(`Remove member ${label ?? m.id}?`)) return
+    if (!confirm(`Leave "${org.name}"?`)) return
     setError(null)
     try {
-      await api.deleteMember(org.id, m.id)
-      const [mList, saList] = await Promise.all([
-        api.listMembers(org.id),
-        api.listServiceAccounts(org.id),
-      ])
-      setMembers(mList)
-      setServiceAccounts(saList)
-      if (keysMemberId === m.id) setKeysMemberId(null)
+      await api.deleteMember(session.token)
+      setActiveOrgId(null)
+      await refreshOrgs()
+      navigate("/orgs")
     } catch (err) {
       setError(err)
     }
@@ -186,14 +256,9 @@ export function OrgDetailPage() {
     setCreatingSa(true)
     setError(null)
     try {
-      await api.createServiceAccount(org.id, { name: saName.trim() })
+      await api.createServiceAccount(session.token, { name: saName.trim() })
       setSaName("")
-      const [mList, saList] = await Promise.all([
-        api.listMembers(org.id),
-        api.listServiceAccounts(org.id),
-      ])
-      setMembers(mList)
-      setServiceAccounts(saList)
+      await reloadMembers()
     } catch (err) {
       setError(err)
     } finally {
@@ -201,51 +266,13 @@ export function OrgDetailPage() {
     }
   }
 
-  async function onToggleSa(sa: ServiceAccount) {
-    if (!org) return
-    const suspend = sa.status === "active"
-    if (
-      !confirm(
-        suspend
-          ? `Suspend service account "${sa.name}"?`
-          : `Re-enable service account "${sa.name}"?`,
-      )
-    )
-      return
-    setError(null)
-    try {
-      await api.updateMember(org.id, sa.member_id, {
-        status: suspend ? "suspended" : "active",
-      })
-      const [mList, saList] = await Promise.all([
-        api.listMembers(org.id),
-        api.listServiceAccounts(org.id),
-      ])
-      setMembers(mList)
-      setServiceAccounts(saList)
-    } catch (err) {
-      setError(err)
-    }
-  }
-
   async function onDeleteSa(sa: ServiceAccount) {
     if (!org) return
-    if (
-      !confirm(
-        `Delete service account "${sa.name}"? Removes its member row and keys.`,
-      )
-    )
-      return
+    if (!confirm(`Delete service account "${sa.name}"?`)) return
     setError(null)
     try {
-      await api.deleteServiceAccount(org.id, sa.id)
-      const [mList, saList] = await Promise.all([
-        api.listMembers(org.id),
-        api.listServiceAccounts(org.id),
-      ])
-      setMembers(mList)
-      setServiceAccounts(saList)
-      if (keysMemberId === sa.member_id) setKeysMemberId(null)
+      await api.deleteServiceAccount(session.token, sa.id)
+      await reloadMembers()
     } catch (err) {
       setError(err)
     }
@@ -258,23 +285,32 @@ export function OrgDetailPage() {
     setProbing(true)
     setProbeResult(null)
     setError(null)
-    const path = `/api/organizations/${id}/projects`
+    const path = `POST /user/organizations/${id}/session`
     try {
-      const data = await api.listProjects(id)
+      const minted = await api.createMemberSession(id)
       setProbeResult(
-        `GET ${path}\nHTTP 200 (member)\n${JSON.stringify(data, null, 2)}`,
+        [
+          path,
+          "HTTP 201",
+          "Member session. Send as X-API-Key on organization and member routes.",
+          "This probe does not replace the app session, and does not call /org with the user JWT.",
+          minted.token,
+          `member_id=${minted.member_id}`,
+          `organization_id=${minted.organization_id}`,
+          `expires_at=${minted.expires_at}`,
+        ].join("\n"),
       )
     } catch (err) {
       if (err instanceof ApiError) {
         setProbeResult(
           [
-            `GET ${path}`,
+            path,
             `HTTP ${err.status} ${err.code}`,
             err.message,
             err.requestId ? `request_id=${err.requestId}` : null,
             "",
             err.status === 404
-              ? "Expected for non-members: gateway org admission returns 404 (not 403)."
+              ? "Not an active member. Organization routes are not called with the user JWT."
               : null,
           ]
             .filter((line) => line !== null)
@@ -309,10 +345,6 @@ export function OrgDetailPage() {
     )
   }
 
-  const keysMember = keysMemberId
-    ? members.find((m) => m.id === keysMemberId)
-    : null
-
   return (
     <div>
       <nav aria-label="breadcrumb">
@@ -330,6 +362,9 @@ export function OrgDetailPage() {
         <div>
           <h1 className="h3 mb-1">{org.name}</h1>
           <p className="small font-monospace text-muted mb-0">{org.id}</p>
+          <p className="small font-monospace text-muted mb-0">
+            member {session.member_id}
+          </p>
         </div>
         <div className="d-flex gap-2">
           <button
@@ -344,6 +379,12 @@ export function OrgDetailPage() {
           </Link>
         </div>
       </div>
+
+      <p className="small text-muted">
+        <code>GET/PATCH/DELETE /org</code> uses the member session (
+        <code>X-API-Key</code>), not the user JWT. The gateway fills the
+        subject into the path.
+      </p>
 
       <ErrorAlert error={error} onDismiss={() => setError(null)} />
       {saved && <div className="alert alert-success py-2">Saved.</div>}
@@ -395,9 +436,9 @@ export function OrgDetailPage() {
             <div className="card-header">Service accounts</div>
             <div className="card-body">
               <p className="small text-muted">
-                Non-human org principals. Create adds an SA + active member
-                (default role <code>member</code>). Cannot be{" "}
-                <code>owner</code>. Admin/owner only.
+                Non-human members of this org. Create adds a service account
+                and an active member. Keys for a service account are not minted
+                here.
               </p>
               <div className="list-group mb-3">
                 {serviceAccounts.length === 0 && (
@@ -424,33 +465,13 @@ export function OrgDetailPage() {
                         member {sa.member_id}
                       </div>
                     </div>
-                    <div className="d-flex flex-wrap gap-1">
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-primary"
-                        onClick={() =>
-                          setKeysMemberId((cur) =>
-                            cur === sa.member_id ? null : sa.member_id,
-                          )
-                        }
-                      >
-                        Keys
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        onClick={() => void onToggleSa(sa)}
-                      >
-                        {sa.status === "suspended" ? "Enable" : "Suspend"}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-danger"
-                        onClick={() => void onDeleteSa(sa)}
-                      >
-                        Delete
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-danger"
+                      onClick={() => void onDeleteSa(sa)}
+                    >
+                      Delete
+                    </button>
                   </div>
                 ))}
               </div>
@@ -489,7 +510,8 @@ export function OrgDetailPage() {
             <div className="card-header text-danger">Danger zone</div>
             <div className="card-body">
               <p className="small text-muted mb-2">
-                Owner only. Soft-deletes org after checks.
+                Deletes the organization and its members, invites, service
+                accounts, and keys.
               </p>
               <button
                 type="button"
@@ -505,11 +527,13 @@ export function OrgDetailPage() {
         <div className="col-lg-7 mb-4">
           <h2 className="h5">Members</h2>
           <p className="small text-muted">
-            Platform API. Your user id:{" "}
+            <code>GET/POST /org/members</code> with the member session. Your
+            user id:{" "}
             <code className="user-select-all">{me?.user_id ?? "…"}</code>
-            {" — "}add another user’s id (from their Profile page) to demo
-            multi-user access. SA members appear here too (
-            <code>principal=service_account</code>).
+            {" — "}add another user’s id (from their Profile page). Service
+            accounts appear here too (<code>principal=service_account</code>).
+            Your status is <code>PATCH /member</code> (<code>active</code> or{" "}
+            <code>suspended</code>).
           </p>
 
           <div className="list-group mb-3">
@@ -517,10 +541,7 @@ export function OrgDetailPage() {
               <div className="list-group-item text-muted">No members.</div>
             )}
             {members.map((m) => {
-              const roles =
-                m.principal === "service_account" ? SA_ROLES : HUMAN_ROLES
-              const isMe =
-                m.principal === "user" && m.user_id === me?.user_id
+              const isMe = m.id === session.member_id
               return (
                 <div
                   key={m.id}
@@ -548,72 +569,50 @@ export function OrgDetailPage() {
                       {m.status} · member {m.id}
                     </div>
                   </div>
-                  <div className="d-flex gap-2 align-items-center">
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${
-                        keysMemberId === m.id
-                          ? "btn-primary"
-                          : "btn-outline-primary"
-                      }`}
-                      onClick={() =>
-                        setKeysMemberId((cur) => (cur === m.id ? null : m.id))
-                      }
-                    >
-                      Keys
-                    </button>
-                    <select
-                      className="form-select form-select-sm"
-                      style={{ width: "auto" }}
-                      value={m.role}
-                      onChange={(e) =>
-                        void onRole(m, e.target.value as MemberRole)
-                      }
-                    >
-                      {!roles.includes(m.role) && (
-                        <option value={m.role}>{m.role}</option>
-                      )}
-                      {roles.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-danger"
-                      onClick={() => void onRemove(m)}
-                    >
-                      Remove
-                    </button>
-                  </div>
+                  {isMe && (
+                    <div className="d-flex gap-2 align-items-center">
+                      <select
+                        className="form-select form-select-sm"
+                        style={{ width: "auto" }}
+                        aria-label="Your membership status"
+                        value={
+                          m.status === "active" || m.status === "suspended"
+                            ? m.status
+                            : "active"
+                        }
+                        disabled={statusSaving}
+                        onChange={(e) =>
+                          void onSelfStatus(e.target.value as MemberPatchStatus)
+                        }
+                      >
+                        {SELF_STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger"
+                        onClick={() => void onLeave()}
+                      >
+                        Leave
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })}
           </div>
 
-          {keysMember && (
-            <div className="mb-4">
-              <MemberKeysPanel
-                orgId={org.id}
-                memberId={keysMember.id}
-                label={memberLabel(keysMember)}
-              />
-              <p className="small text-muted mt-2 mb-0">
-                Human: self or admin/owner. SA: admin/owner only. Try keys on{" "}
-                <Link to="/api-keys">API keys</Link> probe (org-scope path).
-              </p>
-            </div>
-          )}
+          <div className="mb-4">
+            <MemberKeysPanel
+              sessionToken={session.token}
+              memberId={session.member_id}
+            />
+          </div>
 
-          {myMember && !keysMemberId && (
-            <p className="small text-muted mb-3">
-              Tip: open <strong>Keys</strong> on your row or a service account
-              to mint <code>{memberKeyPrefix}</code> keys for org-scope automation.
-            </p>
-          )}
-
-          <InvitePanel orgId={org.id} onError={setError} />
+          <InvitePanel sessionToken={session.token} onError={setError} />
 
           <div className="card mb-4">
             <div className="card-header">Add user member</div>
@@ -622,7 +621,7 @@ export function OrgDetailPage() {
                 className="row g-2 align-items-end"
                 onSubmit={(e) => void onAddMember(e)}
               >
-                <div className="col-md-7">
+                <div className="col">
                   <label className="form-label" htmlFor="member_uid">
                     User ID
                   </label>
@@ -635,29 +634,10 @@ export function OrgDetailPage() {
                     placeholder="user id from Profile"
                   />
                 </div>
-                <div className="col-md-3">
-                  <label className="form-label" htmlFor="member_role">
-                    Role
-                  </label>
-                  <select
-                    id="member_role"
-                    className="form-select"
-                    value={memberRole}
-                    onChange={(e) =>
-                      setMemberRole(e.target.value as MemberRole)
-                    }
-                  >
-                    {HUMAN_ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="col-md-2">
+                <div className="col-auto">
                   <button
                     type="submit"
-                    className="btn btn-primary w-100"
+                    className="btn btn-primary"
                     disabled={adding || !memberUserId.trim()}
                   >
                     {adding ? "…" : "Add"}
@@ -667,10 +647,11 @@ export function OrgDetailPage() {
             </div>
           </div>
 
-          <h2 className="h5">Org admission probe</h2>
+          <h2 className="h5">Member session probe</h2>
           <p className="small text-muted">
-            <code>GET …/projects</code> for an org you are not a member of →
-            gateway <strong>404</strong> (existence policy), not 403.
+            <code>POST /user/organizations/{"{id}"}/session</code> with the user
+            JWT. Not an active member → <strong>404</strong>. A user JWT on{" "}
+            <code>/org</code> is 401; this probe does not send one.
           </p>
           <form className="card card-body" onSubmit={(e) => void onProbe(e)}>
             <div className="mb-3">
@@ -694,7 +675,7 @@ export function OrgDetailPage() {
               className="btn btn-outline-secondary"
               disabled={probing || !probeOrgId.trim()}
             >
-              {probing ? "Probing…" : "Probe projects"}
+              {probing ? "Probing…" : "Mint session"}
             </button>
           </form>
           {probeResult && (

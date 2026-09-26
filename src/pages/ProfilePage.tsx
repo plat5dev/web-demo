@@ -18,7 +18,7 @@ export function ProfilePage() {
       setLoading(true)
       setError(null)
       try {
-        const p = await api.getProfileMe()
+        const p = await api.getProfile()
         if (!cancelled) {
           setProfile(p)
           setDisplayName(p.display_name)
@@ -41,7 +41,7 @@ export function ProfilePage() {
     setError(null)
     setSaved(false)
     try {
-      const p = await api.putProfileMe({
+      const p = await api.putProfile({
         display_name: displayName,
         bio,
       })
@@ -63,8 +63,8 @@ export function ProfilePage() {
       <div className="col-lg-7">
         <h1 className="h3 mb-3">Profile</h1>
         <p className="text-muted small">
-          User-scoped API (<code>GET/PUT /api/profiles/me</code>). Gateway
-          injects <code>X-User-Id</code>.
+          User route (<code>GET/PUT /user/profile</code>) with the user JWT.
+          The gateway fills the subject into the path.
         </p>
         <ErrorAlert error={error} onDismiss={() => setError(null)} />
         {saved && (
