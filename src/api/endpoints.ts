@@ -158,6 +158,42 @@ export const api = {
       auth: memberAuth(sessionToken),
     }),
 
+  /** Member keys for that service account. Same rows as its member self-address. */
+  listServiceAccountApiKeys: async (
+    sessionToken: string,
+    serviceAccountId: string,
+  ) => {
+    const data = await apiFetch<{ keys: ApiKeyListed[]; has_more: boolean }>(
+      `/org/service-accounts/${enc(serviceAccountId)}/api-keys`,
+      { auth: memberAuth(sessionToken) },
+    )
+    return data.keys ?? []
+  },
+
+  createServiceAccountApiKey: (
+    sessionToken: string,
+    serviceAccountId: string,
+    body: CreateApiKeyBody,
+  ) =>
+    apiFetch<ApiKeyCreated>(
+      `/org/service-accounts/${enc(serviceAccountId)}/api-keys`,
+      {
+        method: "POST",
+        auth: memberAuth(sessionToken),
+        body: JSON.stringify(body),
+      },
+    ),
+
+  deleteServiceAccountApiKey: (
+    sessionToken: string,
+    serviceAccountId: string,
+    keyId: string,
+  ) =>
+    apiFetch<void>(
+      `/org/service-accounts/${enc(serviceAccountId)}/api-keys/${enc(keyId)}`,
+      { method: "DELETE", auth: memberAuth(sessionToken) },
+    ),
+
   /** Acts on the credential's member only. */
   getMember: (sessionToken: string) =>
     apiFetch<Member>("/member", { auth: memberAuth(sessionToken) }),

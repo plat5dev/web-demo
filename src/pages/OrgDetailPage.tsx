@@ -13,6 +13,7 @@ import type {
 import { ErrorAlert } from "../components/ErrorAlert"
 import { InvitePanel } from "../components/InvitePanel"
 import { MemberKeysPanel } from "../components/MemberKeysPanel"
+import { ServiceAccountKeys } from "../components/ServiceAccountKeys"
 import { useOrg } from "../org/OrgContext"
 
 const SELF_STATUSES: MemberPatchStatus[] = ["active", "suspended"]
@@ -437,41 +438,44 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
             <div className="card-body">
               <p className="small text-muted">
                 Non-human members of this org. Create adds a service account
-                and an active member. Keys for a service account are not minted
-                here.
+                and an active member. Keys are member keys, minted here for
+                that service account.
               </p>
               <div className="list-group mb-3">
                 {serviceAccounts.length === 0 && (
                   <div className="list-group-item text-muted">None yet.</div>
                 )}
                 {serviceAccounts.map((sa) => (
-                  <div
-                    key={sa.id}
-                    className="list-group-item d-flex flex-wrap gap-2 justify-content-between align-items-start"
-                  >
-                    <div>
-                      <div className="fw-semibold">
-                        {sa.name}{" "}
-                        {sa.status === "suspended" && (
-                          <span className="badge text-bg-secondary">
-                            suspended
-                          </span>
-                        )}
+                  <div key={sa.id} className="list-group-item">
+                    <div className="d-flex flex-wrap gap-2 justify-content-between align-items-start">
+                      <div>
+                        <div className="fw-semibold">
+                          {sa.name}{" "}
+                          {sa.status === "suspended" && (
+                            <span className="badge text-bg-secondary">
+                              suspended
+                            </span>
+                          )}
+                        </div>
+                        <div className="small font-monospace text-muted">
+                          sa {sa.id}
+                        </div>
+                        <div className="small font-monospace text-muted">
+                          member {sa.member_id}
+                        </div>
                       </div>
-                      <div className="small font-monospace text-muted">
-                        sa {sa.id}
-                      </div>
-                      <div className="small font-monospace text-muted">
-                        member {sa.member_id}
-                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger"
+                        onClick={() => void onDeleteSa(sa)}
+                      >
+                        Delete
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-danger"
-                      onClick={() => void onDeleteSa(sa)}
-                    >
-                      Delete
-                    </button>
+                    <ServiceAccountKeys
+                      sessionToken={session.token}
+                      serviceAccountId={sa.id}
+                    />
                   </div>
                 ))}
               </div>

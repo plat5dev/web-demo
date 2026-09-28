@@ -66,7 +66,9 @@ export function HomePage() {
             </li>
             <li className="list-group-item">
               <strong>Member API keys</strong> (<code>{memberKeyPrefix}</code>) →
-              the signed-in member’s keys on <code>/member/api-keys</code>
+              the signed-in member’s keys on <code>/member/api-keys</code>.
+              Service-account keys are the same credential, minted at{" "}
+              <code>/org/service-accounts/{"{id}"}/api-keys</code>
             </li>
             <li className="list-group-item">
               <strong>Orgs, members, invites, service accounts</strong> → member

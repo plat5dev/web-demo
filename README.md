@@ -28,7 +28,7 @@ bun install
 bun run dev            # http://localhost:5173
 ```
 
-Sign in → Auth password UI (dev codes in Auth issuer logs when SMTP unset) → profile / user API keys / orgs (member session, members, copy-invite-link, service accounts, your member keys, session probe) / projects / tasks.
+Sign in → Auth password UI (dev codes in Auth issuer logs when SMTP unset) → profile / user API keys / orgs (member session, members, copy-invite-link, service accounts and their keys, your member keys, session probe) / projects / tasks.
 
 The browser does not send subject ids. User routes use the user JWT (`Authorization: Bearer`). Opening an org mints a member session (`POST /user/organizations/{id}/session`). Organization and member routes, including `/member/projects`, send that token as `X-API-Key`, not the user JWT. The gateway fills the subject into the path. A user JWT on those routes is 401. Not an active member → session mint 404; the app does not then call `/org`.
 
