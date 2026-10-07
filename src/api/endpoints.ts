@@ -50,7 +50,8 @@ export const api = {
     }),
 
   /**
-   * User JWT. No body. 201 `{ token, expires_at, member_id, organization_id }`.
+   * User JWT or user API key. No body. 201 `{ token, expires_at, member_id, organization_id, scopes }`.
+   * `scopes` is null unless the caller was a restricted user key; then the session carries that key's scopes.
    * Not an active member → 404. Do not follow a 404 with `/org` on the user JWT.
    */
   createMemberSession: (organizationId: string) =>
