@@ -56,6 +56,8 @@ export type MemberSession = {
   expires_at: string
   member_id: string
   organization_id: string
+  /** null = unrestricted (minted from a login). A list only when minted from a restricted user key. */
+  scopes: string[] | null
 }
 
 export type Project = {

@@ -94,8 +94,9 @@ export function LoginPage() {
               </p>
             ) : (
               <p className="text-muted">
-                Redirects to Plat5 Auth (password code). Dev codes appear in
-                Auth issuer logs when SMTP is unset.
+                Redirects to Plat5 Auth (password code). Login codes appear in
+                Auth issuer logs only when Auth runs with{" "}
+                <code>AUTH_DEV_MODE=true</code> and SMTP is unset.
               </p>
             )}
             <button
