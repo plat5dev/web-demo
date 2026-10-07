@@ -6,7 +6,7 @@ Stack: Vite · React · TypeScript · Bootstrap 5.
 
 ## Prerequisites
 
-1. **Plat5 Auth** on `:5000` with SPA allowlists (defaults are often Postman-only):
+1. **Plat5 Auth** on `:5000` with SPA allowlists (`plat5 init --auth` writes these to `plat5.yml` `auth.allowed_*`; the issuer's own `AUTH_ALLOWED_ORIGINS` default is empty):
 
    ```bash
    AUTH_ALLOWED_CLIENTS=plat5
@@ -41,7 +41,7 @@ Invite copy-link is `{origin}/login?invite={token}`. Already signed in: redeem i
 | `VITE_GATEWAY_URL` | `http://localhost:5001` |
 | `VITE_AUTH_ISSUER` | `http://localhost:5000` |
 | `VITE_AUTH_CLIENT_ID` | `plat5` |
-| `VITE_AUTH_REDIRECT_URI` | `http://localhost:5173/callback` |
+| `VITE_AUTH_REDIRECT_URI` | `{window.location.origin}/callback` |
 | `VITE_AUTH_AUDIENCE` | (unset) |
 | `VITE_APIKEY_BRAND` | `plat5` |
 
