@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { api } from "../api/endpoints"
-import type { Invite } from "../api/types"
+import type { CreateInviteBody, Invite, Role } from "../api/types"
 import { inviteAppUrl } from "../auth/session"
+import { defaultOption } from "../api/roles"
+import { RoleSelect } from "./RoleSelect"
 
 const INVITE_TTL_OPTIONS: { label: string; value: string }[] = [
   { label: "Default (7 days)", value: "" },
@@ -14,12 +16,18 @@ const INVITE_TTL_OPTIONS: { label: string; value: string }[] = [
 export function InvitePanel({
   sessionToken,
   onError,
+  roles,
+  defaultRole,
 }: {
   sessionToken: string
   onError: (err: unknown) => void
+  /** The deployment's roles. Empty without a roles file. */
+  roles: Role[]
+  defaultRole: string | null
 }) {
   const [invites, setInvites] = useState<Invite[]>([])
   const [inviteTtl, setInviteTtl] = useState("")
+  const [inviteRole, setInviteRole] = useState("")
   const [creatingInvite, setCreatingInvite] = useState(false)
   const [createdInvite, setCreatedInvite] = useState<Invite | null>(null)
   const [copied, setCopied] = useState<"link" | "token" | null>(null)
@@ -71,8 +79,9 @@ export function InvitePanel({
     setCreatedInvite(null)
     setCopied(null)
     try {
-      const body: { expires_in_seconds?: number } = {}
+      const body: CreateInviteBody = {}
       if (inviteTtl) body.expires_in_seconds = Number(inviteTtl)
+      if (inviteRole) body.role = inviteRole
       const created = await api.createInvite(sessionToken, body)
       setCreatedInvite(created)
       if (created.token) await copyText("link", created.token)
@@ -165,6 +174,7 @@ export function InvitePanel({
                 </div>
                 <div className="small text-muted">
                   {inv.status}
+                  {inv.role ? ` · role ${inv.role}` : ""}
                   {inv.email ? ` · ${inv.email}` : ""}
                   {` · ${inv.use_count}/${inv.max_uses ?? "unlimited"}`}
                   {` · expires ${inv.expires_at}`}
@@ -197,6 +207,24 @@ export function InvitePanel({
           className="row g-2 align-items-end"
           onSubmit={(e) => void onCreateInvite(e)}
         >
+          {roles.length > 0 && (
+            <div className="col-md-12">
+              <label className="form-label" htmlFor="invite_role">
+                Role
+              </label>
+              <RoleSelect
+                id="invite_role"
+                roles={roles}
+                value={inviteRole}
+                onChange={setInviteRole}
+                empty={defaultOption(defaultRole)}
+              />
+              <div className="form-text">
+                Checked when the invite is minted: you can only hand out a role
+                whose labels you hold.
+              </div>
+            </div>
+          )}
           <div className="col-md-8">
             <label className="form-label" htmlFor="invite_ttl">
               Expires

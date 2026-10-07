@@ -12,6 +12,7 @@ import type {
   Organization,
   Profile,
   Project,
+  RolesList,
   ServiceAccount,
   Task,
   TaskStatus,
@@ -50,8 +51,8 @@ export const api = {
     }),
 
   /**
-   * User JWT or user API key. No body. 201 `{ token, expires_at, member_id, organization_id, scopes }`.
-   * `scopes` is null unless the caller was a restricted user key; then the session carries that key's scopes.
+   * User JWT or user API key. No body. 201 `{ token, expires_at, member_id, organization_id, role, scopes }`.
+   * `scopes` is the effective set at mint: the member's role labels, narrowed by a restricted user key.
    * Not an active member → 404. Do not follow a 404 with `/org` on the user JWT.
    */
   createMemberSession: (organizationId: string) =>
@@ -110,7 +111,11 @@ export const api = {
     return data.members ?? []
   },
 
-  createMember: (sessionToken: string, body: { user_id: string }) =>
+  /** The deployment's roles. Same list for every org today. */
+  listRoles: (sessionToken: string) =>
+    apiFetch<RolesList>("/org/roles", { auth: memberAuth(sessionToken) }),
+
+  createMember: (sessionToken: string, body: { user_id: string; role?: string }) =>
     apiFetch<Member>("/org/members", {
       method: "POST",
       auth: memberAuth(sessionToken),
@@ -132,6 +137,27 @@ export const api = {
       body: JSON.stringify(body ?? {}),
     }),
 
+  /**
+   * The org acting on one of its members (not yourself: that is `/member`).
+   * The caller must hold every label of the member's current role and of a new role.
+   */
+  updateOrgMember: (
+    sessionToken: string,
+    memberId: string,
+    body: { status?: MemberPatchStatus; role?: string },
+  ) =>
+    apiFetch<Member>(`/org/members/${enc(memberId)}`, {
+      method: "PATCH",
+      auth: memberAuth(sessionToken),
+      body: JSON.stringify(body),
+    }),
+
+  removeOrgMember: (sessionToken: string, memberId: string) =>
+    apiFetch<void>(`/org/members/${enc(memberId)}`, {
+      method: "DELETE",
+      auth: memberAuth(sessionToken),
+    }),
+
   revokeInvite: (sessionToken: string, inviteId: string) =>
     apiFetch<void>(`/org/invites/${enc(inviteId)}`, {
       method: "DELETE",
@@ -146,7 +172,10 @@ export const api = {
     return data.service_accounts ?? []
   },
 
-  createServiceAccount: (sessionToken: string, body: { name: string }) =>
+  createServiceAccount: (
+    sessionToken: string,
+    body: { name: string; role?: string },
+  ) =>
     apiFetch<ServiceAccount>("/org/service-accounts", {
       method: "POST",
       auth: memberAuth(sessionToken),

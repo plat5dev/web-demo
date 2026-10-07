@@ -32,6 +32,8 @@ Sign in → Auth password UI (login codes in Auth issuer logs only when Auth run
 
 The browser does not send subject ids. User routes use the user JWT (`Authorization: Bearer`). Opening an org mints a member session (`POST /user/organizations/{id}/session`). Organization and member routes, including `/member/projects`, send that token as `X-API-Key`, not the user JWT. The gateway fills the subject into the path. A user JWT on those routes is 401. Not an active member → session mint 404; the app does not then call `/org`.
 
+Roles: with a roles file (`roles.yml`), the org page shows your role and effective labels (from the session mint), a role picker on invite, add-member, and service-account create, and role / status / remove on other members (`PATCH` / `DELETE /org/members/{id}`). Controls whose label you lack are disabled; the gateway still decides, and a 403 names the `required_scopes`. Without a roles file nothing changes.
+
 Invite copy-link is `{origin}/login?invite={token}`. Already signed in: redeem immediately (skip PKCE). Else the app stashes the token in a first-party cookie (`plat5_web_demo_invite`) plus an origin stash keyed by OAuth CSRF `state`, strips the query so Referer to Auth cannot leak it, starts PKCE (Auth `/authorize` does **not** get `invite=`; token never in OAuth `state`), then `POST /user/invites/redeem` with `{ "token" }` and the user JWT. Cookie/stash clear only after a successful redeem. Add-by-`user_id` still works. Email is unbound. No SMTP.
 
 ## Env

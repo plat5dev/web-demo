@@ -8,11 +8,15 @@ import type {
   MemberSession,
   Organization,
   Profile,
+  RolesList,
   ServiceAccount,
 } from "../api/types"
+import { defaultOption, holds } from "../api/roles"
+import { scopesSummary } from "../api/scopes"
 import { ErrorAlert } from "../components/ErrorAlert"
 import { InvitePanel } from "../components/InvitePanel"
 import { MemberKeysPanel } from "../components/MemberKeysPanel"
+import { RoleSelect } from "../components/RoleSelect"
 import { ServiceAccountKeys } from "../components/ServiceAccountKeys"
 import { useOrg } from "../org/OrgContext"
 
@@ -89,11 +93,20 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
   const [saved, setSaved] = useState(false)
 
   const [memberUserId, setMemberUserId] = useState("")
+  const [memberRole, setMemberRole] = useState("")
   const [adding, setAdding] = useState(false)
   const [statusSaving, setStatusSaving] = useState(false)
+  /** Member id whose role/status change or removal is in flight. */
+  const [memberSaving, setMemberSaving] = useState<string | null>(null)
 
   const [saName, setSaName] = useState("")
+  const [saRole, setSaRole] = useState("")
   const [creatingSa, setCreatingSa] = useState(false)
+
+  const [roles, setRoles] = useState<RolesList | null>(null)
+  const roleList = roles?.roles ?? []
+  // The session's effective labels. The gateway decides; these only hide what it would refuse.
+  const can = (label: string) => holds(session.scopes, label)
 
   const [probeOrgId, setProbeOrgId] = useState("")
   const [probing, setProbing] = useState(false)
@@ -105,14 +118,17 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
       setLoading(true)
       setError(null)
       try {
-        const [o, m, sas, self] = await Promise.all([
+        const [o, m, sas, self, r] = await Promise.all([
           api.getOrg(session.token),
           api.listMembers(session.token),
           api.listServiceAccounts(session.token),
           api.getMember(session.token),
+          // Older identity catalogs don't publish /org/roles: show no roles.
+          api.listRoles(session.token).catch(() => null),
         ])
         if (cancelled) return
         setOrg(o)
+        setRoles(r)
         setName(o.name)
         setSlug(o.slug)
         setMembers(m.some((row) => row.id === self.id) ? m : [self, ...m])
@@ -198,8 +214,12 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
     setAdding(true)
     setError(null)
     try {
-      await api.createMember(session.token, { user_id: memberUserId.trim() })
+      await api.createMember(session.token, {
+        user_id: memberUserId.trim(),
+        ...(memberRole ? { role: memberRole } : {}),
+      })
       setMemberUserId("")
+      setMemberRole("")
       await reloadMembers()
     } catch (err) {
       setError(err)
@@ -257,13 +277,48 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
     setCreatingSa(true)
     setError(null)
     try {
-      await api.createServiceAccount(session.token, { name: saName.trim() })
+      await api.createServiceAccount(session.token, {
+        name: saName.trim(),
+        ...(saRole ? { role: saRole } : {}),
+      })
       setSaName("")
+      setSaRole("")
       await reloadMembers()
     } catch (err) {
       setError(err)
     } finally {
       setCreatingSa(false)
+    }
+  }
+
+  /** The org acting on another member: PATCH /org/members/{id}. */
+  async function onChangeMember(
+    m: Member,
+    body: { status?: MemberPatchStatus; role?: string },
+  ) {
+    setMemberSaving(m.id)
+    setError(null)
+    try {
+      await api.updateOrgMember(session.token, m.id, body)
+      await reloadMembers()
+    } catch (err) {
+      setError(err)
+    } finally {
+      setMemberSaving(null)
+    }
+  }
+
+  async function onRemoveMember(m: Member) {
+    if (!confirm(`Remove ${memberLabel(m)} from the organization?`)) return
+    setMemberSaving(m.id)
+    setError(null)
+    try {
+      await api.removeOrgMember(session.token, m.id)
+      await reloadMembers()
+    } catch (err) {
+      setError(err)
+    } finally {
+      setMemberSaving(null)
     }
   }
 
@@ -366,6 +421,12 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
           <p className="small font-monospace text-muted mb-0">
             member {session.member_id}
           </p>
+          {roleList.length > 0 && (
+            <p className="small text-muted mb-0">
+              role <strong>{session.role ?? "unrestricted"}</strong> · labels{" "}
+              <span className="font-monospace">{scopesSummary(session.scopes)}</span>
+            </p>
+          )}
         </div>
         <div className="d-flex gap-2">
           <button
@@ -425,7 +486,8 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={saving}
+                  disabled={saving || !can("org:write")}
+                  title={can("org:write") ? undefined : "Needs org:write"}
                 >
                   {saving ? "Saving…" : "Save"}
                 </button>
@@ -451,6 +513,11 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                       <div>
                         <div className="fw-semibold">
                           {sa.name}{" "}
+                          {sa.role && (
+                            <span className="badge text-bg-light border">
+                              {sa.role}
+                            </span>
+                          )}{" "}
                           {sa.status === "suspended" && (
                             <span className="badge text-bg-secondary">
                               suspended
@@ -468,6 +535,7 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                         type="button"
                         className="btn btn-sm btn-outline-danger"
                         onClick={() => void onDeleteSa(sa)}
+                        disabled={!can("org:service-accounts:write")}
                       >
                         Delete
                       </button>
@@ -483,6 +551,20 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                 className="row g-2 align-items-end"
                 onSubmit={(e) => void onCreateSa(e)}
               >
+                {roleList.length > 0 && (
+                  <div className="col-auto">
+                    <label className="form-label" htmlFor="sa_role">
+                      Role
+                    </label>
+                    <RoleSelect
+                      id="sa_role"
+                      roles={roleList}
+                      value={saRole}
+                      onChange={setSaRole}
+                      empty={defaultOption(roles?.default_role)}
+                    />
+                  </div>
+                )}
                 <div className="col">
                   <label className="form-label" htmlFor="sa_name">
                     Name
@@ -501,7 +583,11 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                   <button
                     type="submit"
                     className="btn btn-primary"
-                    disabled={creatingSa || !saName.trim()}
+                    disabled={
+                      creatingSa ||
+                      !saName.trim() ||
+                      !can("org:service-accounts:write")
+                    }
                   >
                     {creatingSa ? "…" : "Create"}
                   </button>
@@ -521,6 +607,8 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                 type="button"
                 className="btn btn-outline-danger btn-sm"
                 onClick={() => void onDeleteOrg()}
+                disabled={!can("org:delete")}
+                title={can("org:delete") ? undefined : "Needs org:delete"}
               >
                 Delete organization
               </button>
@@ -537,7 +625,10 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
             {" — "}add another user’s id (from their Profile page). Service
             accounts appear here too (<code>principal=service_account</code>).
             Your status is <code>PATCH /member</code> (<code>active</code> or{" "}
-            <code>suspended</code>).
+            <code>suspended</code>). Other members are{" "}
+            <code>PATCH/DELETE /org/members/{"{id}"}</code>: you can only change
+            or remove a member whose role's labels you hold, and assign a role
+            whose labels you hold.
           </p>
 
           <div className="list-group mb-3">
@@ -565,6 +656,11 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                       >
                         {m.principal}
                       </span>
+                      {roleList.length > 0 && (
+                        <span className="badge text-bg-light border">
+                          {m.role ?? "unrestricted"}
+                        </span>
+                      )}
                       {isMe && (
                         <span className="badge text-bg-primary">you</span>
                       )}
@@ -604,6 +700,58 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                       </button>
                     </div>
                   )}
+                  {!isMe && (
+                    <div className="d-flex gap-2 align-items-center">
+                      <RoleSelect
+                        roles={roleList}
+                        ariaLabel={`Role of ${memberLabel(m)}`}
+                        value={m.role ?? ""}
+                        empty={
+                          m.role === null
+                            ? { label: "unrestricted", disabled: true }
+                            : undefined
+                        }
+                        disabled={
+                          memberSaving === m.id || !can("org:members:write")
+                        }
+                        onChange={(role) => void onChangeMember(m, { role })}
+                      />
+                      <select
+                        className="form-select form-select-sm"
+                        style={{ width: "auto" }}
+                        aria-label={`Status of ${memberLabel(m)}`}
+                        value={
+                          m.status === "active" || m.status === "suspended"
+                            ? m.status
+                            : "active"
+                        }
+                        disabled={
+                          memberSaving === m.id || !can("org:members:write")
+                        }
+                        onChange={(e) =>
+                          void onChangeMember(m, {
+                            status: e.target.value as MemberPatchStatus,
+                          })
+                        }
+                      >
+                        {SELF_STATUSES.map((st) => (
+                          <option key={st} value={st}>
+                            {st}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger"
+                        disabled={
+                          memberSaving === m.id || !can("org:members:write")
+                        }
+                        onClick={() => void onRemoveMember(m)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -616,7 +764,12 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
             />
           </div>
 
-          <InvitePanel sessionToken={session.token} onError={setError} />
+          <InvitePanel
+            sessionToken={session.token}
+            onError={setError}
+            roles={roleList}
+            defaultRole={roles?.default_role ?? null}
+          />
 
           <div className="card mb-4">
             <div className="card-header">Add user member</div>
@@ -638,11 +791,27 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                     placeholder="user id from Profile"
                   />
                 </div>
+                {roleList.length > 0 && (
+                  <div className="col-auto">
+                    <label className="form-label" htmlFor="member_role">
+                      Role
+                    </label>
+                    <RoleSelect
+                      id="member_role"
+                      roles={roleList}
+                      value={memberRole}
+                      onChange={setMemberRole}
+                      empty={defaultOption(roles?.default_role)}
+                    />
+                  </div>
+                )}
                 <div className="col-auto">
                   <button
                     type="submit"
                     className="btn btn-primary"
-                    disabled={adding || !memberUserId.trim()}
+                    disabled={
+                      adding || !memberUserId.trim() || !can("org:members:write")
+                    }
                   >
                     {adding ? "…" : "Add"}
                   </button>

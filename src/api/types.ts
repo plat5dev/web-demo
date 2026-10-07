@@ -31,6 +31,8 @@ export type Organization = OrganizationRef & {
 export type Membership = {
   id: string
   organization: OrganizationRef
+  /** Slug from the deployment's roles file. null = unrestricted (no roles file, or set before one). */
+  role: string | null
   status: "active"
 }
 
@@ -45,6 +47,7 @@ export type Member = {
   principal: "user" | "service_account"
   user_id: string | null
   service_account_id: string | null
+  role: string | null
   status: MemberStatus
   added_by: string | null
   created_at: string
@@ -56,8 +59,24 @@ export type MemberSession = {
   expires_at: string
   member_id: string
   organization_id: string
-  /** null = unrestricted (minted from a login). A list only when minted from a restricted user key. */
+  role: string | null
+  /**
+   * Effective labels at mint: the role's labels intersected with the caller's.
+   * null = unrestricted. Use it to show or hide actions; the gateway still decides.
+   */
   scopes: string[] | null
+}
+
+/** A role from the deployment's roles file. `scopes: null` grants every label. */
+export type Role = {
+  slug: string
+  scopes: string[] | null
+}
+
+export type RolesList = {
+  roles: Role[]
+  creator_role: string | null
+  default_role: string | null
 }
 
 export type Project = {
@@ -88,6 +107,7 @@ export type ServiceAccount = {
   organization_id: string
   member_id: string
   name: string
+  role: string | null
   status: MemberStatus
   created_by_user_id: string | null
   created_at: string
@@ -121,6 +141,7 @@ export type Invite = {
   id: string
   organization_id: string
   email: string | null
+  role: string | null
   token_prefix: string
   token?: string
   status: InviteStatus
@@ -133,6 +154,8 @@ export type Invite = {
 
 export type CreateInviteBody = {
   email?: string
+  /** Omit for the deployment's default_role. */
+  role?: string
   expires_in_seconds?: number
   max_uses?: number | null
 }
