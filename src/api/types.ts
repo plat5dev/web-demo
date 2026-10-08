@@ -77,6 +77,8 @@ export type RolesList = {
   roles: Role[]
   creator_role: string | null
   default_role: string | null
+  /** What a service-account create gets without a role. Absent on older identity. */
+  service_account_default_role?: string | null
 }
 
 export type Project = {

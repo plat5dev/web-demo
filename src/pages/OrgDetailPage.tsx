@@ -561,7 +561,9 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                       roles={roleList}
                       value={saRole}
                       onChange={setSaRole}
-                      empty={defaultOption(roles?.default_role)}
+                      empty={defaultOption(
+                        roles?.service_account_default_role ?? roles?.default_role,
+                      )}
                     />
                   </div>
                 )}
