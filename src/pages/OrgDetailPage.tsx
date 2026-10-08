@@ -122,8 +122,7 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
           api.listMembers(session.token),
           api.listServiceAccounts(session.token),
           api.getMember(session.token),
-          // Older identity catalogs don't publish /org/roles: show no roles.
-          api.listRoles(session.token).catch(() => null),
+          api.listRoles(session.token),
         ])
         if (cancelled) return
         setOrg(o)
@@ -560,9 +559,7 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                       roles={roleList}
                       value={saRole}
                       onChange={setSaRole}
-                      empty={defaultOption(
-                        roles?.service_account_default_role ?? roles?.default_role,
-                      )}
+                      empty={defaultOption(roles?.service_account_default_role)}
                     />
                   </div>
                 )}
@@ -659,7 +656,7 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                       </span>
                       {roleList.length > 0 && (
                         <span className="badge text-bg-light border">
-                          {m.role ?? "no role"}
+                          {m.role}
                         </span>
                       )}
                       {isMe && (
@@ -707,11 +704,6 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                         roles={roleList}
                         ariaLabel={`Role of ${memberLabel(m)}`}
                         value={m.role ?? ""}
-                        empty={
-                          m.role === null
-                            ? { label: "no role", disabled: true }
-                            : undefined
-                        }
                         disabled={
                           memberSaving === m.id || !can("org:members:write")
                         }
