@@ -31,8 +31,8 @@ export type Organization = OrganizationRef & {
 export type Membership = {
   id: string
   organization: OrganizationRef
-  /** Slug from the deployment's roles file. Every member has one. */
-  role: string
+  /** Slug from the deployment's roles file. null when roles are off. */
+  role: string | null
   status: "active"
 }
 
@@ -47,7 +47,7 @@ export type Member = {
   principal: "user" | "service_account"
   user_id: string | null
   service_account_id: string | null
-  role: string
+  role: string | null
   status: MemberStatus
   added_by: string | null
   created_at: string
@@ -59,26 +59,27 @@ export type MemberSession = {
   expires_at: string
   member_id: string
   organization_id: string
-  role: string
+  role: string | null
   /**
-   * The member's role labels at mint. null = every label.
+   * The member's role labels at mint. ["*"] = every label (also when roles are off).
    * Use it to show or hide actions; the gateway still decides.
    */
-  labels: string[] | null
+  labels: string[]
 }
 
-/** A role from the deployment's roles file. `labels: null` grants every label. */
+/** A role from the deployment's roles file. `labels: ["*"]` grants every label. */
 export type Role = {
   slug: string
-  labels: string[] | null
+  labels: string[]
 }
 
 export type RolesList = {
   roles: Role[]
-  creator_role: string
-  default_role: string
+  /** The three role fields are null when roles are off (roles is then []). */
+  creator_role: string | null
+  default_role: string | null
   /** What a service-account create gets without a role. */
-  service_account_default_role: string
+  service_account_default_role: string | null
 }
 
 export type Project = {
@@ -109,7 +110,7 @@ export type ServiceAccount = {
   organization_id: string
   member_id: string
   name: string
-  role: string
+  role: string | null
   status: MemberStatus
   created_by_user_id: string | null
   created_at: string
@@ -140,7 +141,7 @@ export type Invite = {
   id: string
   organization_id: string
   email: string | null
-  role: string
+  role: string | null
   token_prefix: string
   token?: string
   status: InviteStatus

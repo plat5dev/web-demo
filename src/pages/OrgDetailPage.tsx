@@ -422,7 +422,7 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
           </p>
           {roleList.length > 0 && (
             <p className="small text-muted mb-0">
-              role <strong>{session.role}</strong> · labels{" "}
+              role <strong>{session.role ?? "none"}</strong> · labels{" "}
               <span className="font-monospace">{labelsSummary(session.labels)}</span>
             </p>
           )}
@@ -659,7 +659,7 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                       </span>
                       {roleList.length > 0 && (
                         <span className="badge text-bg-light border">
-                          {m.role}
+                          {m.role ?? "no role"}
                         </span>
                       )}
                       {isMe && (
@@ -706,7 +706,12 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                       <RoleSelect
                         roles={roleList}
                         ariaLabel={`Role of ${memberLabel(m)}`}
-                        value={m.role}
+                        value={m.role ?? ""}
+                        empty={
+                          m.role === null
+                            ? { label: "no role", disabled: true }
+                            : undefined
+                        }
                         disabled={
                           memberSaving === m.id || !can("org:members:write")
                         }
