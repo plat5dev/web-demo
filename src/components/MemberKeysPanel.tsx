@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { api } from "../api/endpoints"
-import { mintKeyBody, scopesSummary } from "../api/scopes"
 import type { ApiKeyCreated, ApiKeyListed } from "../api/types"
 import { ErrorAlert } from "./ErrorAlert"
 import { memberKeyPrefix } from "../config"
@@ -13,7 +12,6 @@ type Props = {
 export function MemberKeysPanel({ sessionToken, memberId }: Props) {
   const [keys, setKeys] = useState<ApiKeyListed[]>([])
   const [name, setName] = useState("")
-  const [scopesRaw, setScopesRaw] = useState("")
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<unknown>(null)
@@ -62,10 +60,9 @@ export function MemberKeysPanel({ sessionToken, memberId }: Props) {
     try {
       const key = await api.createMemberApiKey(
         sessionToken,
-        mintKeyBody(name.trim(), scopesRaw),
+        { name: name.trim() },
       )
       setName("")
-      setScopesRaw("")
       setCreated(key)
       await load()
     } catch (err) {
@@ -94,8 +91,8 @@ export function MemberKeysPanel({ sessionToken, memberId }: Props) {
         <code>GET/POST /member/api-keys</code> · prefix{" "}
         <code>{memberKeyPrefix}</code> · member{" "}
         <code className="font-monospace">{memberId}</code>. Sent as{" "}
-        <code>X-API-Key</code> on organization and member routes. User keys do
-        not cover those routes.
+        <code>X-API-Key</code> on organization and member routes. It carries
+        this member's role. User keys do not cover those routes.
       </p>
 
       <ErrorAlert error={error} onDismiss={() => setError(null)} />
@@ -106,9 +103,6 @@ export function MemberKeysPanel({ sessionToken, memberId }: Props) {
           <code className="user-select-all d-block text-break">
             {created.key}
           </code>
-          <div className="small mt-1 text-muted">
-            scopes {scopesSummary(created.scopes)}
-          </div>
         </div>
       )}
 
@@ -133,9 +127,6 @@ export function MemberKeysPanel({ sessionToken, memberId }: Props) {
               </div>
               <div className="small font-monospace text-muted">
                 {k.key_prefix}… · {k.id}
-              </div>
-              <div className="small text-muted">
-                scopes {scopesSummary(k.scopes)}
               </div>
             </div>
             {!k.revoked_at && (
@@ -165,25 +156,6 @@ export function MemberKeysPanel({ sessionToken, memberId }: Props) {
             maxLength={128}
             placeholder="deploy-ci"
           />
-        </div>
-        <div className="mb-2">
-          <label
-            className="form-label small mb-1"
-            htmlFor="member_key_scopes"
-          >
-            Scopes (optional)
-          </label>
-          <input
-            id="member_key_scopes"
-            className="form-control form-control-sm font-monospace"
-            value={scopesRaw}
-            onChange={(e) => setScopesRaw(e.target.value)}
-            placeholder="leave blank for unrestricted"
-          />
-          <div className="form-text">
-            Comma or space separated labels your app owns. Omit for an
-            unrestricted key.
-          </div>
         </div>
         <button
           type="submit"

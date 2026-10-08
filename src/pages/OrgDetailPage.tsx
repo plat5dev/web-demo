@@ -105,7 +105,7 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
 
   const [roles, setRoles] = useState<RolesList | null>(null)
   const roleList = roles?.roles ?? []
-  // The session's effective labels. The gateway decides; these only hide what it would refuse.
+  // The session's role labels. The gateway decides; these only hide what it would refuse.
   const can = (label: string) => holds(session.scopes, label)
 
   const [probeOrgId, setProbeOrgId] = useState("")
@@ -626,9 +626,9 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
             accounts appear here too (<code>principal=service_account</code>).
             Your status is <code>PATCH /member</code> (<code>active</code> or{" "}
             <code>suspended</code>). Other members are{" "}
-            <code>PATCH/DELETE /org/members/{"{id}"}</code>: you can only change
-            or remove a member whose role's labels you hold, and assign a role
-            whose labels you hold.
+            <code>PATCH/DELETE /org/members/{"{id}"}</code>. Whoever holds{" "}
+            <code>org:members:write</code> may assign any role, including to
+            themselves.
           </p>
 
           <div className="list-group mb-3">

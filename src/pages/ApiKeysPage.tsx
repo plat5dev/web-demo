@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { Link } from "react-router-dom"
 import { api } from "../api/endpoints"
-import { mintKeyBody, scopesSummary } from "../api/scopes"
 import type { ApiKeyCreated, ApiKeyListed } from "../api/types"
 import { ApiError } from "../api/client"
 import { ErrorAlert } from "../components/ErrorAlert"
@@ -39,7 +38,6 @@ export function ApiKeysPage() {
   const { activeOrg, session } = useOrg()
   const [keys, setKeys] = useState<ApiKeyListed[]>([])
   const [name, setName] = useState("")
-  const [scopesRaw, setScopesRaw] = useState("")
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<unknown>(null)
@@ -74,9 +72,8 @@ export function ApiKeysPage() {
     setError(null)
     setCreated(null)
     try {
-      const key = await api.createUserApiKey(mintKeyBody(name.trim(), scopesRaw))
+      const key = await api.createUserApiKey({ name: name.trim() })
       setName("")
-      setScopesRaw("")
       setCreated(key)
       setTryKey(key.key)
       await load()
@@ -213,8 +210,6 @@ export function ApiKeysPage() {
           <div className="small mt-1 text-muted">
             prefix <code>{created.key_prefix}</code> · id{" "}
             <code className="font-monospace">{created.id}</code>
-            {" · scopes "}
-            {scopesSummary(created.scopes)}
           </div>
         </div>
       )}
@@ -241,9 +236,6 @@ export function ApiKeysPage() {
                   </div>
                   <div className="small font-monospace text-muted">
                     {k.key_prefix}… · {k.id}
-                  </div>
-                  <div className="small text-muted">
-                    scopes {scopesSummary(k.scopes)}
                   </div>
                   <div className="small text-muted">
                     created {k.created_at}
@@ -281,23 +273,9 @@ export function ApiKeysPage() {
                     placeholder="ci-bot"
                   />
                 </div>
-                <div className="mb-3">
-                  <label className="form-label" htmlFor="key_scopes">
-                    Scopes (optional)
-                  </label>
-                  <input
-                    id="key_scopes"
-                    className="form-control font-monospace"
-                    value={scopesRaw}
-                    onChange={(e) => setScopesRaw(e.target.value)}
-                    placeholder="leave blank for unrestricted"
-                  />
-                  <div className="form-text">
-                    Comma or space separated labels your app owns. Leave blank
-                    to omit <code>scopes</code> (unrestricted key). Insufficient
-                    scope on a labeled route is gateway 403 — the error envelope
-                    is shown below.
-                  </div>
+                <div className="form-text mb-3">
+                  A key is you: it has your permissions on user routes, the same
+                  as your login.
                 </div>
                 <button
                   type="submit"

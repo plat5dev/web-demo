@@ -61,8 +61,8 @@ export type MemberSession = {
   organization_id: string
   role: string | null
   /**
-   * Effective labels at mint: the role's labels intersected with the caller's.
-   * null = unrestricted. Use it to show or hide actions; the gateway still decides.
+   * The member's role labels at mint. null = unrestricted.
+   * Use it to show or hide actions; the gateway still decides.
    */
   scopes: string[] | null
 }
@@ -120,18 +120,15 @@ export type ApiKeyListed = {
   name: string
   created_at: string
   revoked_at: string | null
-  /** App-owned labels. `null`/omitted = unrestricted. List never includes the secret. */
-  scopes?: string[] | null
 }
 
 export type ApiKeyCreated = ApiKeyListed & {
   key: string
 }
 
-/** Mint JSON. Omit `scopes` for unrestricted; never send `null` or `[]`. */
+/** Mint JSON. A key carries its owner's permissions; there is no `scopes`. */
 export type CreateApiKeyBody = {
   name: string
-  scopes?: string[]
 }
 
 export type InviteStatus = "active" | "redeemed" | "revoked" | "expired"

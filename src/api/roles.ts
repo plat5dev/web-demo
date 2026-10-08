@@ -6,7 +6,7 @@ export function roleLabels(r: Role): string {
   return r.scopes.join(", ")
 }
 
-/** Whether the session's effective scopes hold a label. null = unrestricted. */
+/** Whether the session's role labels hold a label. null = unrestricted. */
 export function holds(scopes: string[] | null, label: string): boolean {
   return scopes === null || scopes.includes(label)
 }

@@ -52,7 +52,7 @@ export const api = {
 
   /**
    * User JWT or user API key. No body. 201 `{ token, expires_at, member_id, organization_id, role, scopes }`.
-   * `scopes` is the effective set at mint: the member's role labels, narrowed by a restricted user key.
+   * `scopes` is the member's role labels at mint.
    * Not an active member → 404. Do not follow a 404 with `/org` on the user JWT.
    */
   createMemberSession: (organizationId: string) =>

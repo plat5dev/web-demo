@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { api } from "../api/endpoints"
-import { mintKeyBody, scopesSummary } from "../api/scopes"
 import type { ApiKeyCreated, ApiKeyListed } from "../api/types"
 import { ErrorAlert } from "./ErrorAlert"
 import { memberKeyPrefix } from "../config"
@@ -16,14 +15,12 @@ export function ServiceAccountKeys({
 }: Props) {
   const [keys, setKeys] = useState<ApiKeyListed[]>([])
   const [name, setName] = useState("")
-  const [scopesRaw, setScopesRaw] = useState("")
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<unknown>(null)
   const [created, setCreated] = useState<ApiKeyCreated | null>(null)
 
   const nameId = `sa_key_name_${serviceAccountId}`
-  const scopesId = `sa_key_scopes_${serviceAccountId}`
 
   async function load() {
     setLoading(true)
@@ -73,10 +70,9 @@ export function ServiceAccountKeys({
       const key = await api.createServiceAccountApiKey(
         sessionToken,
         serviceAccountId,
-        mintKeyBody(name.trim(), scopesRaw),
+        { name: name.trim() },
       )
       setName("")
-      setScopesRaw("")
       setCreated(key)
       await load()
     } catch (err) {
@@ -104,7 +100,8 @@ export function ServiceAccountKeys({
       <p className="small text-muted mb-2">
         <code>GET/POST /org/service-accounts/{serviceAccountId}/api-keys</code>{" "}
         · prefix <code>{memberKeyPrefix}</code>. Member key for this service
-        account, not a separate credential. Sent as <code>X-API-Key</code>.
+        account, not a separate credential. It carries the service account's
+        role, not yours. Sent as <code>X-API-Key</code>.
       </p>
 
       <ErrorAlert error={error} onDismiss={() => setError(null)} />
@@ -115,9 +112,6 @@ export function ServiceAccountKeys({
           <code className="user-select-all d-block text-break">
             {created.key}
           </code>
-          <div className="small mt-1 text-muted">
-            scopes {scopesSummary(created.scopes)}
-          </div>
         </div>
       )}
 
@@ -140,9 +134,6 @@ export function ServiceAccountKeys({
               </div>
               <div className="small font-monospace text-muted">
                 {k.key_prefix}… · {k.id}
-              </div>
-              <div className="small text-muted">
-                scopes {scopesSummary(k.scopes)}
               </div>
             </div>
             {!k.revoked_at && (
@@ -171,18 +162,6 @@ export function ServiceAccountKeys({
             required
             maxLength={128}
             placeholder="deploy-ci"
-          />
-        </div>
-        <div className="mb-2">
-          <label className="form-label small mb-1" htmlFor={scopesId}>
-            Scopes (optional)
-          </label>
-          <input
-            id={scopesId}
-            className="form-control form-control-sm font-monospace"
-            value={scopesRaw}
-            onChange={(e) => setScopesRaw(e.target.value)}
-            placeholder="leave blank for unrestricted"
           />
         </div>
         <button
