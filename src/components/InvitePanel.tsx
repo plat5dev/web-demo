@@ -220,8 +220,9 @@ export function InvitePanel({
                 empty={defaultOption(defaultRole)}
               />
               <div className="form-text">
-                Checked when the invite is minted: you can only hand out a role
-                whose labels you hold.
+                The role's labels come from the deployment's roles file. Anyone
+                who may create invites may hand out any role, even one with more
+                labels than their own.
               </div>
             </div>
           )}
