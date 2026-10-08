@@ -31,8 +31,8 @@ export type Organization = OrganizationRef & {
 export type Membership = {
   id: string
   organization: OrganizationRef
-  /** Slug from the deployment's roles file. null = unrestricted (no roles file, or set before one). */
-  role: string | null
+  /** Slug from the deployment's roles file. Every member has one. */
+  role: string
   status: "active"
 }
 
@@ -47,7 +47,7 @@ export type Member = {
   principal: "user" | "service_account"
   user_id: string | null
   service_account_id: string | null
-  role: string | null
+  role: string
   status: MemberStatus
   added_by: string | null
   created_at: string
@@ -59,26 +59,26 @@ export type MemberSession = {
   expires_at: string
   member_id: string
   organization_id: string
-  role: string | null
+  role: string
   /**
-   * The member's role labels at mint. null = unrestricted.
+   * The member's role labels at mint. null = every label.
    * Use it to show or hide actions; the gateway still decides.
    */
-  scopes: string[] | null
+  labels: string[] | null
 }
 
-/** A role from the deployment's roles file. `scopes: null` grants every label. */
+/** A role from the deployment's roles file. `labels: null` grants every label. */
 export type Role = {
   slug: string
-  scopes: string[] | null
+  labels: string[] | null
 }
 
 export type RolesList = {
   roles: Role[]
-  creator_role: string | null
-  default_role: string | null
-  /** What a service-account create gets without a role. Absent on older identity. */
-  service_account_default_role?: string | null
+  creator_role: string
+  default_role: string
+  /** What a service-account create gets without a role. */
+  service_account_default_role: string
 }
 
 export type Project = {
@@ -109,7 +109,7 @@ export type ServiceAccount = {
   organization_id: string
   member_id: string
   name: string
-  role: string | null
+  role: string
   status: MemberStatus
   created_by_user_id: string | null
   created_at: string
@@ -128,7 +128,7 @@ export type ApiKeyCreated = ApiKeyListed & {
   key: string
 }
 
-/** Mint JSON. A key carries its owner's permissions; there is no `scopes`. */
+/** Mint JSON. A key carries its owner's permissions; it has no labels of its own. */
 export type CreateApiKeyBody = {
   name: string
 }
@@ -140,7 +140,7 @@ export type Invite = {
   id: string
   organization_id: string
   email: string | null
-  role: string | null
+  role: string
   token_prefix: string
   token?: string
   status: InviteStatus

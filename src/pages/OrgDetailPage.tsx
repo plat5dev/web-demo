@@ -11,8 +11,7 @@ import type {
   RolesList,
   ServiceAccount,
 } from "../api/types"
-import { defaultOption, holds } from "../api/roles"
-import { scopesSummary } from "../api/scopes"
+import { defaultOption, holds, labelsSummary } from "../api/roles"
 import { ErrorAlert } from "../components/ErrorAlert"
 import { InvitePanel } from "../components/InvitePanel"
 import { MemberKeysPanel } from "../components/MemberKeysPanel"
@@ -106,7 +105,7 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
   const [roles, setRoles] = useState<RolesList | null>(null)
   const roleList = roles?.roles ?? []
   // The session's role labels. The gateway decides; these only hide what it would refuse.
-  const can = (label: string) => holds(session.scopes, label)
+  const can = (label: string) => holds(session.labels, label)
 
   const [probeOrgId, setProbeOrgId] = useState("")
   const [probing, setProbing] = useState(false)
@@ -423,8 +422,8 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
           </p>
           {roleList.length > 0 && (
             <p className="small text-muted mb-0">
-              role <strong>{session.role ?? "unrestricted"}</strong> · labels{" "}
-              <span className="font-monospace">{scopesSummary(session.scopes)}</span>
+              role <strong>{session.role}</strong> · labels{" "}
+              <span className="font-monospace">{labelsSummary(session.labels)}</span>
             </p>
           )}
         </div>
@@ -660,7 +659,7 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                       </span>
                       {roleList.length > 0 && (
                         <span className="badge text-bg-light border">
-                          {m.role ?? "unrestricted"}
+                          {m.role}
                         </span>
                       )}
                       {isMe && (
@@ -707,12 +706,7 @@ function OrgDetailLoaded({ session }: { session: MemberSession }) {
                       <RoleSelect
                         roles={roleList}
                         ariaLabel={`Role of ${memberLabel(m)}`}
-                        value={m.role ?? ""}
-                        empty={
-                          m.role === null
-                            ? { label: "unrestricted", disabled: true }
-                            : undefined
-                        }
+                        value={m.role}
                         disabled={
                           memberSaving === m.id || !can("org:members:write")
                         }
